@@ -20,6 +20,7 @@ struct chat_payload_join {
 } __attribute__((packed));
 
 struct chat_payload_msg {
+    char name[NICK_LEN];
     char mess[MESS_LEN];
 } __attribute__((packed));
 

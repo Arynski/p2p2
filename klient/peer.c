@@ -4,6 +4,7 @@
 #include "common/network.h"
 #include "handler.h"
 #include "common/protocol_mess.h"
+#include <sys/select.h>
 
 void peer_start(int sock, struct sockaddr_in *server) {
     char nick[NICK_LEN];
@@ -102,9 +103,117 @@ void peer_start(int sock, struct sockaddr_in *server) {
             }
             case PEER_STATE_CONNECTED: {
                 printf("Brawo, polaczono!");
-                struct sockaddr_in sender;
-                int n = net_recv(sock, buf, BUF_SIZE, &sender); //maks 3 sekundy bedzie
+                peer_chat(sock, &host_addr, nick);
+                return;
             } break;
+        }
+    }
+}
+
+void peer_chat(int sock, struct sockaddr_in *host, char* nick) {
+    uint8_t buf[BUF_SIZE];
+ 
+    //wysyla CHAT_JOIN
+
+    struct chat_payload_join join_pl;
+    strncpy(join_pl.name, nick, NICK_LEN - 1);
+    join_pl.name[NICK_LEN - 1] = '\0';
+    size_t len = build_frame(buf, CHAT_JOIN, &join_pl, sizeof(join_pl));
+    net_send(sock, buf, len, host);
+ 
+    printf("Jesteś na czacie jako '%s'. Wpisz 'exit' aby wyjść.\n", nick);
+    fflush(stdout);
+ 
+    fd_set readfds;
+    int maxfd = sock > 0 ? sock : 0;
+    time_t last_punch = time(NULL);
+ 
+    while(1) {
+        struct timeval tv = {1, 0}; // 1 sekunda — żeby pętla nie wisiała wiecznie
+        FD_ZERO(&readfds);
+        FD_SET(0, &readfds);    // stdin
+        FD_SET(sock, &readfds); // socket
+ 
+        if(select(maxfd + 1, &readfds, NULL, NULL, &tv) < 0) {
+            perror("select");
+            break;
+        }
+
+        //wyslanie puncha
+        if(time(NULL) - last_punch >= 10) {
+            size_t len = build_frame(buf, CHAT_PUNCH, NULL, 0);
+            net_send(sock, buf, len, host);
+            last_punch = time(NULL);
+        }
+ 
+        //odbiór wiadomości z sieci
+        if(FD_ISSET(sock, &readfds)) {
+            struct sockaddr_in sender;
+            int n = net_recv(sock, buf, BUF_SIZE, &sender);
+            if(n < (int)sizeof(struct msg_header)) continue;
+            struct msg_header *hdr = (struct msg_header *)buf;
+ 
+            switch(hdr->type) {
+                case CHAT_MSG: {
+                    if(hdr->payload_len < sizeof(struct chat_payload_msg)) break;
+                    struct chat_payload_msg *pl = (struct chat_payload_msg *)hdr->payload;
+                    printf("\r%-40s\n", " "); 
+                    printf("%s: %s\n", pl->name, pl->mess);
+                    printf("> "); fflush(stdout);
+                    break;
+                }
+                case CHAT_JOIN: {
+                    if(hdr->payload_len < sizeof(struct chat_payload_join)) break;
+                    struct chat_payload_join *pl = (struct chat_payload_join *)hdr->payload;
+                    printf("\r%-40s\n", " ");
+                    printf("*** %s dołączył do pokoju ***\n", pl->name);
+                    printf("> "); fflush(stdout);
+                    break;
+                }
+                case CHAT_LEAVE: {
+                    printf("\r%-40s\n", " ");
+                    printf("*** ktoś wyszedł z pokoju ***\n");
+                    printf("> "); fflush(stdout);
+                    break;
+                }
+                case CHAT_KICK: {
+                    printf("\nZostałeś wyrzucony z pokoju.\n");
+                    // poinformuj hosta że wychodzimy
+                    len = build_frame(buf, CHAT_LEAVE, NULL, 0);
+                    net_send(sock, buf, len, host);
+                    return;
+                }
+                default: break;
+            }
+        }
+ 
+        //wejście z klawiatury
+        if(FD_ISSET(0, &readfds)) {
+            char message[MESS_LEN];
+            if(fgets(message, sizeof(message), stdin) == NULL) break;
+            message[strcspn(message, "\n")] = '\0';
+ 
+            if(strcmp(message, "exit") == 0) {
+                printf("Opuszczasz pokój...\n");
+                len = build_frame(buf, CHAT_LEAVE, NULL, 0);
+                net_send(sock, buf, len, host);
+                return;
+            }
+ 
+            if(message[0] == '\0') {
+                printf("> "); fflush(stdout);
+                continue;
+            }
+ 
+            struct chat_payload_msg data;
+            strncpy(data.name, nick, NICK_LEN - 1);
+            data.name[NICK_LEN - 1] = '\0';
+            strncpy(data.mess, message, MESS_LEN - 1);
+            data.mess[MESS_LEN - 1] = '\0';
+            len = build_frame(buf, CHAT_MSG, &data, sizeof(data));
+            net_send(sock, buf, len, host);
+ 
+            printf("> "); fflush(stdout);
         }
     }
 }

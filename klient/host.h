@@ -6,6 +6,7 @@
 #include "common/protocol_STUN.h"
 #include "common/protocol_mess.h"
 #define MAX_PEERS 8
+#define TIMEOUT_PEER 60
 
 struct peer {
     struct sockaddr_in addr;
@@ -24,9 +25,10 @@ typedef enum {
     HOSTING_
 } hosting_state_t;
 
-void host_hosting(int sock, struct sockaddr_in *server);
+void host_hosting(int sock, struct sockaddr_in *server, char* nick);
 void host_start(int sock, struct sockaddr_in *server);
 
+/*zarowno wysyla punche do wszystkich z who jak i sprawdza czasy timeoutow i wyrzuca nieaktywnych*/
 void send_punches(int sock, struct peer* who);
 /*przyjmuje socket, liste peerow i ramke z wiadomoscia, typu CHAT_MSG ktora wysyla*/
 void broadcast_mess(int sock, struct peer* who, uint8_t* msg);
@@ -41,5 +43,7 @@ void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hd
                      struct peer *connected, int connected_count);
 void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                        struct peer *connected, int *connected_count);
+void handle_chat_punch(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
+                     struct peer *connected, int connected_count);
 
 #endif
