@@ -5,6 +5,7 @@
 #include <time.h>
 #include "common/protocol_STUN.h"
 #include "common/protocol_mess.h"
+#include "tui/tui.h"
 #define MAX_PEERS 8
 #define TIMEOUT_PEER 60
 
@@ -25,8 +26,8 @@ typedef enum {
     HOSTING_
 } hosting_state_t;
 
-void host_hosting(int sock, struct sockaddr_in *server, char* nick);
-void host_start(int sock, struct sockaddr_in *server);
+void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui);
+void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui);
 
 /*zarowno wysyla punche do wszystkich z who jak i sprawdza czasy timeoutow i wyrzuca nieaktywnych*/
 void send_punches(int sock, struct peer* who);

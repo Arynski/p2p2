@@ -6,16 +6,12 @@
 #include "common/protocol_mess.h"
 #include <sys/select.h>
 
-void host_start(int sock, struct sockaddr_in *server) {
+void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
     uint8_t buf[BUF_SIZE];
-    char nick[NICK_LEN];
     host_start_state_t stan = HOST_STATE_START;
     while(1) {
         switch(stan) {
             case HOST_STATE_START: {
-                printf("Podaj nick: ");
-                fgets(nick, sizeof(nick), stdin);
-                nick[strcspn(nick, "\n")] = 0; // usuwa newline na końcu
                 char nazwa_pokoju[64];
                 printf("Podaj nazwę pokoju: ");
                 fgets(nazwa_pokoju, sizeof(nazwa_pokoju), stdin);
@@ -45,13 +41,13 @@ void host_start(int sock, struct sockaddr_in *server) {
             break;
             }
             case HOST_STATE_HOSTING:
-                host_hosting(sock, server, nick);
+                host_hosting(sock, server, n, tui);
                 return;
         }
     }
 }
 
-void host_hosting(int sock, struct sockaddr_in *server, char* nick) {
+void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
     uint8_t buf[BUF_SIZE];
     struct peer pending_peers[MAX_PEERS];  //w trakcie hole punching
     struct peer connected_peers[MAX_PEERS]; //połączeni
@@ -94,7 +90,7 @@ void host_hosting(int sock, struct sockaddr_in *server, char* nick) {
             }
 
             struct chat_payload_msg data;
-            strncpy(data.name, nick, NICK_LEN - 1);
+            strncpy(data.name, n, NICK_LEN - 1);
             data.name[NICK_LEN - 1] = '\0';
             strncpy(data.mess, message, MESS_LEN - 1);
             data.mess[MESS_LEN - 1] = '\0';

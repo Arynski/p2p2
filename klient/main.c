@@ -5,6 +5,7 @@
 #include "handler.h"
 #include "host.h"
 #include "peer.h"
+#include "tui/tui.h"
 
 int main(int argc, char** argv) {
     int port;
@@ -24,6 +25,14 @@ int main(int argc, char** argv) {
     stun.sin_addr.s_addr = inet_addr("127.0.0.1");
     uint8_t buf[BUF_SIZE];
 
+    tui_t okno;
+    tui_init(&okno);
+
+    while(1) {
+        tui_process_input(&okno);
+    }
+
+    /*
     while(1) {
         int czy_host = 0;
         printf("Czy jestes hostem? (1/0): ");
@@ -35,4 +44,5 @@ int main(int argc, char** argv) {
             peer_start(sock, &stun);
         }
     }
+    */
 }
