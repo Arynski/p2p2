@@ -88,6 +88,10 @@ void peer_start(int sock, struct sockaddr_in *server) {
                         printf("Otrzymalem informacje z serwera...");
                         struct payload_punch* data = (struct payload_punch*)hdr->payload;
                         host_addr = data->addr;
+                        printf("Serwer chce nas zsynchronizowac, mnie z:\n");
+                        printf("sin_family: %d\n", data->addr.sin_family);
+                        printf("adres: %d\n", data->addr.sin_addr);
+                        printf("port: %d\n", data->addr.sin_port);
                     }
                 } else if(hdr->type == MSG_ERROR) {
                     printf("%s\n", ((struct payload_error*)hdr->payload)->message);

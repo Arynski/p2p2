@@ -204,7 +204,10 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
                 break;
             }
         }
+        printf("Serwer chce nas zsynchronizowac, mnie z:\n");
         printf("sin_family: %d\n", data->addr.sin_family);
+        printf("adres: %d\n", data->addr.sin_addr);
+        printf("port: %d\n", data->addr.sin_port);
         //przy okazji wyslemy pierwsze do tego do ktorego mamy wyslac
         size_t len = build_frame(resp, MSG_PUNCH, NULL, 0);
         net_send(sock, resp, len, &(data->addr));
