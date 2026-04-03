@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <syslog.h>
 #include "common/network.h"
 #include "common/protocol_STUN.h"
 #include "room.h"
@@ -17,7 +18,7 @@ size_t build_frame(uint8_t *buf, uint8_t type, const void *payload, uint16_t pay
 }
 
 void handle_payload(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
-    printf("Handle payload, typ: %d\n", hdr->type);
+    syslog(LOG_DEBUG, "Handle payload, typ: %d", hdr->type);
     switch (hdr->type) {
             case MSG_REGISTER:   handle_register(sock, sender, hdr); break;
             case MSG_UNREGISTER: handle_unregister(sock, sender, hdr); break;
@@ -77,12 +78,11 @@ void handle_list(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
 
 /*Synchronizuje peera z hostem*/
 void handle_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
-    printf("Otrzymano join request od %d\n", sender->sin_port);
+    syslog(LOG_DEBUG, "Otrzymano join request od %d\n", sender->sin_port);
     struct payload_join *data = (struct payload_join *)hdr->payload;
     struct room* jointo = room_find(data->room_id);
     
     if(jointo != NULL) {
-        printf("!= NULL\n");
         uint8_t respHost[sizeof(struct msg_header) + sizeof(struct payload_punch)];
         struct payload_punch hostPayload; hostPayload.addr = *sender;
         size_t lenHost = build_frame(respHost, MSG_PUNCH, &hostPayload, sizeof(hostPayload));
