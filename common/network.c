@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <errno.h>
 #include "network.h"
 
 int net_init(uint16_t port) {
@@ -34,7 +35,11 @@ int net_send(int sock, const void *buf, size_t len, struct sockaddr_in *dest) {
 int net_recv(int sock, void *buf, size_t len, struct sockaddr_in *sender) {
     socklen_t addrlen = sizeof(*sender);
     int n = recvfrom(sock, buf, len, 0, (struct sockaddr*)sender, &addrlen);
-    if (n < 0) perror("recvfrom");
+    if (n < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            perror("recvfrom");
+        }
+    }
     return n;
 }
 
