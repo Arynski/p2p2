@@ -22,27 +22,27 @@ int main(int argc, char** argv) {
     struct sockaddr_in stun;
     stun.sin_family = AF_INET;
     stun.sin_port = htons(8888);
-    stun.sin_addr.s_addr = inet_addr("127.0.0.1");
+    stun.sin_addr.s_addr = inet_addr("64.176.65.254");
+    //stun.sin_addr.s_addr = inet_addr("127.0.0.1");
     uint8_t buf[BUF_SIZE];
 
     tui_t okno;
-    tui_init(&okno);
+    //tui_init(&okno);
 
-    while(1) {
-        tui_process_input(&okno);
-    }
+    //while(1) {
+    //    tui_process_input(&okno);
+    //}
 
-    /*
+    char* nick = "nick";
     while(1) {
         int czy_host = 0;
         printf("Czy jestes hostem? (1/0): ");
         scanf("%d", &czy_host); while(getchar() != '\n');
 
         if(czy_host) {
-            host_start(sock, &stun);
+            host_start(sock, &stun, nick, &okno);
         } else {
             peer_start(sock, &stun);
         }
     }
-    */
 }
