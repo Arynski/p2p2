@@ -67,7 +67,7 @@ int room_count(void) {
 void room_cleanup_expired(time_t timeout) {
     for(int i = 0; i < MAX_ROOMS; ++i) {
         if(rooms[i].active && (time(NULL) - rooms[i].last_ping > timeout)) {
-            syslog(LOG_DEBUG, "Usuwam pokoj o nazwie \'%s\' za nieaktywnosc\n", rooms[i].name);
+            syslog(LOG_INFO, "Usuwam pokoj o nazwie \'%s\' za nieaktywnosc", rooms[i].name);
             memset(&rooms[i], 0, sizeof(struct room));
         }
     }

@@ -78,7 +78,7 @@ void handle_list(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
 
 /*Synchronizuje peera z hostem*/
 void handle_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
-    syslog(LOG_DEBUG, "Otrzymano join request od %d\n", sender->sin_port);
+    syslog(LOG_DEBUG, "Otrzymano join request od %d, %d", sender->sin_port, sender->sin_addr);
     struct payload_join *data = (struct payload_join *)hdr->payload;
     struct room* jointo = room_find(data->room_id);
     

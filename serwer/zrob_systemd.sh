@@ -23,7 +23,6 @@ ExecStart=$EXEC_PATH
 Restart=always
 RestartSec=5
 User=$USER_NAME
-StandardOutput=append:/var/log/$SERVICE_NAME.log
 StandardError=inherit
 
 [Install]
