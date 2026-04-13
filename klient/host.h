@@ -30,20 +30,21 @@ void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui);
 void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui);
 
 /*zarowno wysyla punche do wszystkich z who jak i sprawdza czasy timeoutow i wyrzuca nieaktywnych*/
-void send_punches(int sock, struct peer* who);
+void send_punches(int sock, struct peer* who, tui_t* tui);
 /*przyjmuje socket, liste peerow i ramke z wiadomoscia, typu CHAT_MSG ktora wysyla*/
-void broadcast_mess(int sock, struct peer* who, uint8_t* msg);
+void broadcast_mess(int sock, struct peer* who, uint8_t* msg, struct sockaddr_in *sender, tui_t* tui);
 
 //handlery
 void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                           struct peer *pending, int *pending_count,
-                          struct peer *connected, int *connected_count);
+                          struct peer *connected, int *connected_count,
+                          tui_t* tui);
 void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
-                      struct peer *connected, int *connected_count);
+                      struct peer *connected, int *connected_count, tui_t* tui);
 void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
-                     struct peer *connected, int connected_count);
+                     struct peer *connected, int connected_count, tui_t* tui);
 void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
-                       struct peer *connected, int *connected_count);
+                       struct peer *connected, int *connected_count, tui_t* tui);
 void handle_chat_punch(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                      struct peer *connected, int connected_count);
 

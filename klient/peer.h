@@ -2,6 +2,7 @@
 #define PEER_H
 #include <stdint.h>
 #include <arpa/inet.h>
+#include "tui/tui.h"
 #include "common/protocol_mess.h"
 
 typedef enum {
@@ -12,6 +13,6 @@ typedef enum {
     PEER_STATE_CONNECTED,
 } peer_state_t;
 
-void peer_start(int sock, struct sockaddr_in *server);
-void peer_chat(int sock, struct sockaddr_in *host, char* nick);
+void peer_start(int sock, struct sockaddr_in *server, char* nick, tui_t* tui);
+void peer_chat(int sock, struct sockaddr_in *host, char* nick, tui_t* tui);
 #endif

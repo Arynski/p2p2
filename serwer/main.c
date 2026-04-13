@@ -28,7 +28,7 @@ int main() {
     uint8_t buf[BUF_SIZE];
     struct sockaddr_in sender;
     time_t last_cleanup = time(NULL);
-    net_set_timeout(sock, 10);
+    net_set_timeout(sock, 10, 0);
 
     while(1) {
         int n = net_recv(sock, buf, BUF_SIZE, &sender);

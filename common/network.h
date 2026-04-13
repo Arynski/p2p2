@@ -21,6 +21,6 @@ void net_close(int sock);
 int net_addr_compare(struct sockaddr_in* addr1, struct sockaddr_in* addr2);
 
 /*Ustawia timeout na podana ilosc sekund*/
-void net_set_timeout(int sock, int t);
+void net_set_timeout(int sock, int ts, int tu);
 
 #endif

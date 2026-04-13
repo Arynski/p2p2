@@ -33,13 +33,23 @@ int net_send(int sock, const void *buf, size_t len, struct sockaddr_in *dest) {
 }
 
 int net_recv(int sock, void *buf, size_t len, struct sockaddr_in *sender) {
-    socklen_t addrlen = sizeof(*sender);
+    socklen_t addrlen;
+    struct sockaddr_in tmp;
+
+    if(sender == NULL) {
+        sender = &tmp;
+    }
+
+    addrlen = sizeof(*sender);
+
     int n = recvfrom(sock, buf, len, 0, (struct sockaddr*)sender, &addrlen);
+
     if (n < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
             perror("recvfrom");
         }
     }
+
     return n;
 }
 
@@ -48,13 +58,16 @@ void net_close(int sock) {
 }
 
 int net_addr_compare(struct sockaddr_in* addr1, struct sockaddr_in* addr2) {
-    return (addr1->sin_addr.s_addr == addr2->sin_addr.s_addr 
-            && addr1->sin_port == addr2->sin_port);
-}
+    if(addr1 != NULL && addr2 != NULL)
+        return (addr1->sin_addr.s_addr == addr2->sin_addr.s_addr 
+                && addr1->sin_port == addr2->sin_port);
+    else
+        return 0;
+}   
 
-void net_set_timeout(int sock, int t) {
+void net_set_timeout(int sock, int ts, int tu) {
     struct timeval tv;
-    tv.tv_sec = t;
-    tv.tv_usec = 0;
+    tv.tv_sec = ts;
+    tv.tv_usec = tu;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 }
