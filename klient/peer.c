@@ -83,12 +83,6 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                         host_addr_local.sin_addr.s_addr = data->local_addr.sin_addr.s_addr;
                         host_addr_public.sin_port = data->public_addr.sin_port;
                         host_addr_local.sin_port = data->local_addr.sin_port;
-                        tui_log(tui, "Serwer chce nas zsynchronizowac, mnie z:\n");
-                        tui_log(tui, "sin_family: %d\n", data->public_addr.sin_family);
-                        tui_log(tui, "PUB adres: %s\n", inet_ntoa(data->public_addr.sin_addr));
-                        tui_log(tui, "PUB port: %d\n", ntohs(data->public_addr.sin_port));
-                        tui_log(tui, "LOC adres: %s\n", inet_ntoa(data->local_addr.sin_addr));
-                        tui_log(tui, "LOC port: %d\n", ntohs(data->local_addr.sin_port));
                     }
                 } else if(hdr->type == MSG_ERROR) {
                     printf("%s\n", ((struct payload_error*)hdr->payload)->message);
@@ -147,11 +141,9 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
         int n = net_recv(sock, buf, BUF_SIZE, &sender); //maks 10 ms bedzie
         if(n > 0 && (size_t)n >= sizeof(struct msg_header)) {
             struct msg_header *hdr = (struct msg_header *)buf;
-            tui_log(tui, "n = %d", n);
-            tui_log(tui, "typ: %d", hdr->type);
+            tui_log(tui, "Przyszla wiadomosc, typ: %d", hdr->type);
             switch(hdr->type) {
                 case CHAT_MSG: {
-                    //tui_log(tui, "Wewnatrz CHAT_MSG!!!");
                     tui_log(tui, "CHAT_MSG od %s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
                     if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_msg)) break;
                     struct chat_payload_msg *pl = (struct chat_payload_msg *)hdr->payload;
@@ -197,8 +189,6 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
             data.mess[MESS_LEN - 1] = '\0';
             len = build_frame(buf, CHAT_MSG, &data, sizeof(data));
             net_send(sock, buf, len, host);
- 
-            tui_log(tui, "wysylanie swojej wiadomosci do siebie samego!");
             tui_on_msg(tui, data.name, data.mess);
             tui_get_send(tui);
         }

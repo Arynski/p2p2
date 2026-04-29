@@ -82,8 +82,7 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
         int recv_n = net_recv(sock, buf, BUF_SIZE, &sender); // wraca po 10ms
         if(recv_n >= (int)sizeof(struct msg_header)) {
             struct msg_header *hdr = (struct msg_header *)buf;
-            tui_log(tui, "n = %d", recv_n);
-            tui_log(tui, "typ: %d", hdr->type);
+            tui_log(tui, "Przyszla wiadomosc, typ: %d", hdr->type);
             switch (hdr->type) {
                 case MSG_PUNCH:     handle_hosting_punch(sock, &sender, hdr,
                                                          pending_peers, &pending_count,
@@ -171,7 +170,6 @@ void broadcast_mess(int sock, struct peer* who, uint8_t* msg, struct sockaddr_in
     size_t len = sizeof(struct msg_header) + ((struct msg_header*)msg)->payload_len;
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(who[i].active && !net_addr_compare(sender, &who[i].used_addr)) {
-            tui_log(tui, "Wysylam do i = %d", i);
             net_send(sock, msg, len, &who[i].used_addr);
         }
     }
@@ -186,7 +184,7 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
 
     //jesli 0 to znaczy ze to od peera, ktory chce sie polaczyc a nie zero to od serwera
     if(hdr->payload_len == 0) {
-        tui_log(tui, "Otrzymano jakis punch z: %d\n", ntohs(sender->sin_port));
+        tui_log(tui, "Otrzymano jakis punch z: %s:%d\n", inet_ntoa(sender->sin_addr), ntohs(sender->sin_port));
         for(int i = 0; i < MAX_PEERS; ++i) {
             if(net_addr_compare(sender, &pending[i].public_addr) || 
                 net_addr_compare(sender, &pending[i].local_addr)) {
@@ -194,7 +192,6 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
                 //w przyszlosci mozna go poinformowac, bo tu juz powinna byc dziura
                 if((*connected_count) >= MAX_PEERS) { return; }
                 struct sockaddr_in from = net_addr_compare(sender, &pending[i].public_addr) ? pending[i].public_addr : pending[i].local_addr;
-                tui_log(tui, "Otrzymano punch z: %d\n", from.sin_port);
                 fflush(stdout);
                 for(int j = 0; j < MAX_PEERS; ++j) {
                     if(!connected[j].active) {
@@ -207,7 +204,7 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
                         //dla pewnosci v, tak samo jak peer
                         size_t len = build_frame(resp, MSG_PUNCH, NULL, 0);
                         net_send(sock, resp, len, &connected[j].used_addr);
-                        tui_log(tui, "Dodano go do connected!\n");
+                        tui_log(tui, "Sukces! Dodano do connected!!!\n");
                         fflush(stdout);
                         break;
                     }
@@ -240,12 +237,6 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
                 break;
             }
         }
-        tui_log(tui, "Serwer chce nas zsynchronizowac, mnie z:\n");
-        tui_log(tui, "sin_family: %d\n", data->public_addr.sin_family);
-        tui_log(tui, "PUB adres: %s\n", inet_ntoa(data->public_addr.sin_addr));
-        tui_log(tui, "PUB port: %d\n", ntohs(data->public_addr.sin_port));
-        tui_log(tui, "LOC adres: %s\n", inet_ntoa(data->local_addr.sin_addr));
-        tui_log(tui, "LOC port: %d\n", ntohs(data->local_addr.sin_port));
         //przy okazji wyslemy pierwsze do tego do ktorego mamy wyslac, na oba adresy, pub i loc
         size_t len = build_frame(resp, MSG_PUNCH, NULL, 0);
         net_send(sock, resp, len, &(data->public_addr));
