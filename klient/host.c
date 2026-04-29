@@ -148,6 +148,14 @@ void send_punches(int sock, struct peer* who, tui_t* tui) {
                 net_send(sock, buf, len, &who[i].used_addr);
             } else {
                 //jeszcze pending
+                tui_log(tui, "Wysylam punch do PUB: %s:%d family:%d", 
+                    inet_ntoa(who[i].public_addr.sin_addr), 
+                    ntohs(who[i].public_addr.sin_port),
+                    who[i].public_addr.sin_family);
+                tui_log(tui, "Wysylam punch do LOC: %s:%d family:%d",
+                    inet_ntoa(who[i].local_addr.sin_addr),
+                    ntohs(who[i].local_addr.sin_port),
+                    who[i].local_addr.sin_family);
                 net_send(sock, buf, len, &who[i].public_addr);
                 net_send(sock, buf, len, &who[i].local_addr);
             }

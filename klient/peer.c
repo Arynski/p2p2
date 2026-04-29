@@ -74,7 +74,7 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                         host_addr_used = net_addr_compare(&host_addr_public, &sender) ? host_addr_public : host_addr_local;
                     } else { //informacja zeby zrobic punch
                         struct payload_punch* data = (struct payload_punch*)hdr->payload;
-                        
+
                         memset(&host_addr_local, 0, sizeof(host_addr_local));
                         memset(&host_addr_public, 0, sizeof(host_addr_public));
                         host_addr_public.sin_family = AF_INET;
@@ -97,6 +97,14 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                 //wyslanie co 3 sekundy od kiedy znamy hosta (wystarczy sprawdzac public nawet jak wysylane na oba)
                 if(host_addr_public.sin_addr.s_addr != 0) {
                     size_t len = build_frame(buf, MSG_PUNCH, NULL, 0);
+                    tui_log(tui, "Wysylam punch do PUB: %s:%d family:%d", 
+                        inet_ntoa(host_addr_public.sin_addr), 
+                        ntohs(host_addr_public.sin_port),
+                        host_addr_public.sin_family);
+                    tui_log(tui, "Wysylam punch do LOC: %s:%d family:%d",
+                        inet_ntoa(host_addr_local.sin_addr),
+                        ntohs(host_addr_local.sin_port),
+                        host_addr_local.sin_family);
                     net_send(sock, buf, len, &host_addr_public);
                     net_send(sock, buf, len, &host_addr_local);
                 }
