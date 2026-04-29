@@ -22,8 +22,8 @@ size_t build_frame(uint8_t *buf, uint8_t type, const void *payload, uint16_t pay
 }
 
 void handle_payload(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
-    fprintf(stdout, "\n[SERWER] Odebrano pakiet typu: %d od %s:%d\n", 
-            hdr->type, inet_ntoa(sender->sin_addr), ntohs(sender->sin_port));
+    //fprintf(stdout, "\n[SERWER] Odebrano pakiet typu: %d od %s:%d\n", 
+    //        hdr->type, inet_ntoa(sender->sin_addr), ntohs(sender->sin_port));
     fflush(stdout);
     switch (hdr->type) {
             case MSG_REGISTER:   handle_register(sock, sender, hdr); break;
