@@ -3,9 +3,9 @@
 #include <syslog.h>
 struct room rooms[MAX_ROOMS];
 
-int room_add(const char *name, struct sockaddr_in *host_addr) {
+int room_add(const char *name, struct sockaddr_in *public_host_addr, struct sockaddr_in *local_host_addr) {
     //jeden host -- jeden pokój!!!, usun stary pokoj
-    int old = room_find_by_host(host_addr);
+    int old = room_find_by_host(public_host_addr);
     if(old != -1) memset(&rooms[old], 0, sizeof(struct room));
 
     short duplicate = 0;
@@ -14,7 +14,8 @@ int room_add(const char *name, struct sockaddr_in *host_addr) {
     if(i < MAX_ROOMS) {
         struct room new;
         new.active = 1;
-        new.host_addr = *host_addr;
+        new.public_host_addr = *public_host_addr;
+        new.local_host_addr = *local_host_addr;
         new.last_ping = time(NULL);
         strncpy(new.name, name, sizeof(new.name) - 1);
         new.name[sizeof(new.name)-1] = '\0';
@@ -75,8 +76,8 @@ void room_cleanup_expired(time_t timeout) {
 
 int room_find_by_host(struct sockaddr_in *host_addr) {
     for(int i = 0; i < MAX_ROOMS; ++i) {
-        if(rooms[i].host_addr.sin_port == host_addr->sin_port &&
-           rooms[i].host_addr.sin_addr.s_addr == host_addr->sin_addr.s_addr)
+        if(rooms[i].public_host_addr.sin_port == host_addr->sin_port &&
+           rooms[i].public_host_addr.sin_addr.s_addr == host_addr->sin_addr.s_addr)
             return i;
     }
     return -1;

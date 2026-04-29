@@ -10,7 +10,8 @@
 struct room {
     uint32_t        id;
     char            name[64];
-    struct sockaddr_in host_addr;
+    struct sockaddr_in public_host_addr;
+    struct sockaddr_in local_host_addr;
     time_t          last_ping;
     int             active;
 };
@@ -19,7 +20,7 @@ extern struct room rooms[MAX_ROOMS];
 
 /*Zapisuje w tablicy rooms o rozmiarze MAX_ROOMS nowy pokoj o unikalnym ID
 na pierwszym wolnym miejscu (active=0), zwraca pozycje na której zapisał lub -1*/
-int room_add(const char *name, struct sockaddr_in *host_addr);
+int room_add(const char *name, struct sockaddr_in *public_host_addr, struct sockaddr_in *local_host_addr);
 
 /*Usuwa pokój o podanym ID (ustawia active = 0)*/
 void room_remove(uint32_t id);

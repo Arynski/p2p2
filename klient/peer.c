@@ -13,13 +13,16 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
     peer_state_t stan = PEER_STATE_START;
     uint8_t lista_buf[sizeof(struct payload_list_resp) + sizeof(struct room_entry) * MAX_ROOMS];
     struct payload_list_resp *pokoje = (struct payload_list_resp *)lista_buf;
-    struct sockaddr_in host_addr; host_addr.sin_addr.s_addr = 0;
+    struct sockaddr_in host_addr_public; host_addr_public.sin_addr.s_addr = 0;
+    struct sockaddr_in host_addr_local; host_addr_local.sin_addr.s_addr = 0;
+    struct sockaddr_in host_addr_used; host_addr_used.sin_addr.s_addr = 0;
     while(1) {
         fflush(stdout);
         switch(stan) {
             case PEER_STATE_START: {
                 size_t len = build_frame(buf, MSG_LIST, NULL, 0);
                 net_send(sock, buf, len, server);
+                tui_log(tui, "Wyslano prosbe o liste!");
                 stan = PEER_STATE_WAITING_LIST;
                 break;
             }       
@@ -28,8 +31,9 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                 if(n < sizeof(struct msg_header)) break; //śmieci
                 struct msg_header* hdr = (struct msg_header*)buf;
                 if(hdr->type == MSG_LIST_RESP) {
-                    memcpy(lista_buf, hdr->payload, hdr->payload_len);
+                    memcpy(lista_buf, hdr->payload, ntohs(hdr->payload_len));
                     tui_get_list(tui, pokoje);
+                    tui_log(tui, "Otrzymano odpowiedz na prosbe o liste!");
                     stan = PEER_STATE_BROWSING;
                 }
                 else if(hdr->type == MSG_ERROR) {
@@ -40,7 +44,10 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
             case PEER_STATE_BROWSING: {
                 if(tui_process_input(tui)) {
                     struct payload_join data;
+                    struct sockaddr_in loc_addr = net_get_local_sockaddr(sock);
                     data.room_id = pokoje->rooms[tui->option].room_id;
+                    data.peer_local_ip = loc_addr.sin_addr.s_addr;
+                    data.peer_local_port = loc_addr.sin_port;
                     size_t len = build_frame(buf, MSG_JOIN, &data, sizeof(data));
                     net_send(sock, buf, len, server);
 
@@ -58,28 +65,33 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                 struct msg_header* hdr = (struct msg_header*)buf;
                 //odbiory
                 if(hdr->type == MSG_PUNCH) {
-                    if(hdr->payload_len == 0 && net_addr_compare(&host_addr, &sender)) { 
+                    if(hdr->payload_len == 0 && 
+                      (net_addr_compare(&host_addr_public, &sender) ||
+                      (net_addr_compare(&host_addr_local, &sender)))) { 
                         //faktyczny punch od hosta
                         //ok (y)
                         stan = PEER_STATE_CONNECTED;
+                        host_addr_used = net_addr_compare(&host_addr_public, &sender) ? host_addr_public : host_addr_local;
                     } else { //informacja zeby zrobic punch
                         struct payload_punch* data = (struct payload_punch*)hdr->payload;
-                        host_addr = data->addr;
+                        host_addr_local = data->local_addr;
+                        host_addr_public = data->public_addr;
                     }
                 } else if(hdr->type == MSG_ERROR) {
                     printf("%s\n", ((struct payload_error*)hdr->payload)->message);
                     stan = PEER_STATE_BROWSING;
                 }
-                //wyslanie co 3 sekundy od kiedy znamy hosta
-                if(host_addr.sin_addr.s_addr != 0) {
+                //wyslanie co 3 sekundy od kiedy znamy hosta (wystarczy sprawdzac public nawet jak wysylane na oba)
+                if(host_addr_public.sin_addr.s_addr != 0) {
                     size_t len = build_frame(buf, MSG_PUNCH, NULL, 0);
-                    net_send(sock, buf, len, &host_addr);
+                    net_send(sock, buf, len, &host_addr_public);
+                    net_send(sock, buf, len, &host_addr_local);
                 }
                 break;
             }
             case PEER_STATE_CONNECTED: {
                 tui_get_join(tui);
-                peer_chat(sock, &host_addr, n, tui);
+                peer_chat(sock, &host_addr_used, n, tui);
                 return;
             } break;
         }
@@ -120,13 +132,13 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
                 case CHAT_MSG: {
                     //tui_log(tui, "Wewnatrz CHAT_MSG!!!");
                     tui_log(tui, "CHAT_MSG od %s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
-                    if(hdr->payload_len < sizeof(struct chat_payload_msg)) break;
+                    if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_msg)) break;
                     struct chat_payload_msg *pl = (struct chat_payload_msg *)hdr->payload;
                     tui_on_msg(tui, pl->name, pl->mess);
                     break;
                 }
                 case CHAT_JOIN: {
-                    if(hdr->payload_len < sizeof(struct chat_payload_join)) break;
+                    if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_join)) break;
                     struct chat_payload_join *pl = (struct chat_payload_join *)hdr->payload;
                     tui_on_join(tui, pl->name);
                     break;

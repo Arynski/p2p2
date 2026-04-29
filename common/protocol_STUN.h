@@ -43,6 +43,8 @@ struct msg_header {
 // --- payloady ---
 struct payload_register {
     char name[64];
+    uint32_t host_local_ip;       //adres IP z karty sieciowej (network byte order)
+    uint16_t host_local_port;     //port, na którym klient nasłuchuje
 } __attribute__((packed));
 
 struct payload_registered {
@@ -65,10 +67,13 @@ struct payload_list_resp {
 
 struct payload_join {
     uint32_t room_id;
+    uint32_t peer_local_ip;       //adres IP z karty sieciowej (network byte order)
+    uint16_t peer_local_port;     //port, na którym klient nasłuchuje
 } __attribute__((packed));
 
 struct payload_punch {
-    struct sockaddr_in addr;
+    struct sockaddr_in public_addr;
+    struct sockaddr_in local_addr;
 } __attribute__((packed));
 
 struct payload_error {

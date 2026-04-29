@@ -9,7 +9,7 @@
 size_t build_frame(uint8_t *buf, uint8_t type, const void *payload, uint16_t payload_len) {
     struct msg_header *hdr = (struct msg_header *)buf;
     hdr->type = type;
-    hdr->payload_len = payload_len;
+    hdr->payload_len = htons(payload_len);
     if (payload && payload_len > 0)
         memcpy(buf + sizeof(struct msg_header), payload, payload_len);
     return sizeof(struct msg_header) + payload_len;

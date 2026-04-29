@@ -23,4 +23,7 @@ int net_addr_compare(struct sockaddr_in* addr1, struct sockaddr_in* addr2);
 /*Ustawia timeout na podana ilosc sekund*/
 void net_set_timeout(int sock, int ts, int tu);
 
+/*Pobiera adres lokalny z pierwszego interfejsu ktory nie jest loopback*/
+struct sockaddr_in net_get_local_sockaddr(int sock);
+
 #endif

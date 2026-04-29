@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <ifaddrs.h>
 #include "network.h"
 
 int net_init(uint16_t port) {
@@ -70,4 +71,49 @@ void net_set_timeout(int sock, int ts, int tu) {
     tv.tv_sec = ts;
     tv.tv_usec = tu;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+}
+
+struct sockaddr_in net_get_local_sockaddr(int sock) {
+    struct sockaddr_in result = {0};
+    struct ifaddrs *ifaddr, *ifa;
+    uint32_t ip = 0;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return result;
+    }
+
+    //dla kazdego interfejsu, zwroci pierwszy wiec tu jest teoretycznie mozliwosc ze ktos ma
+    //podpiety kabel np i wifi (wifi z internetem, kabel bez) i to znajdzie kabel i siedzi w limboo000
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) continue;
+
+        //dzialamy w ipv4
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            if (strcmp(ifa->ifa_name, "lo") != 0) {
+                struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
+                
+                //to juz jest network byte order
+                ip = addr->sin_addr.s_addr;
+                break; 
+            }
+        }
+    }
+    freeifaddrs(ifaddr);
+
+    //pobranie portu
+    uint16_t my_port;
+    struct sockaddr_in sin;
+    socklen_t s_len = sizeof(sin);
+    if (getsockname(sock, (struct sockaddr *)&sin, &s_len) == -1) {
+        perror("getsockname");
+    } else {
+        my_port = sin.sin_port; 
+    }
+
+    result.sin_addr.s_addr = ip;
+    result.sin_family = AF_INET;
+    result.sin_port = my_port;
+
+    return result;
 }

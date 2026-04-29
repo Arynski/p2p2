@@ -10,7 +10,9 @@
 #define TIMEOUT_PEER 60
 
 struct peer {
-    struct sockaddr_in addr;
+    struct sockaddr_in used_addr; //albo public albo local
+    struct sockaddr_in public_addr;
+    struct sockaddr_in local_addr;
     time_t timestamp; //do roznych rzeczy, do laczenia, do utrzymywania komunikacji
     char nick[NICK_LEN];
     int active;
