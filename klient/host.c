@@ -215,8 +215,18 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
         for(int i = 0; i < MAX_PEERS; ++i) {
             if(!pending[i].active) {
                 pending[i].active = 1;
-                pending[i].local_addr = data->local_addr;
-                pending[i].public_addr = data->public_addr;
+                struct sockaddr_in pub;
+                struct sockaddr_in loc;
+                memset(&pub, 0, sizeof(pub));
+                memset(&loc, 0, sizeof(loc));
+                pub.sin_family = AF_INET;
+                pub.sin_addr.s_addr = data->public_addr.sin_addr.s_addr;
+                pub.sin_port = data->public_addr.sin_port;
+                loc.sin_family = AF_INET;
+                loc.sin_addr.s_addr = data->local_addr.sin_addr.s_addr;
+                loc.sin_port = data->local_addr.sin_port;
+                pending[i].local_addr = loc;
+                pending[i].public_addr = pub;
                 pending[i].timestamp = time(NULL);
                 (*pending_count)++;
                 break;
