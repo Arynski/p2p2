@@ -22,8 +22,8 @@ int main(int argc, char** argv) {
     struct sockaddr_in stun;
     stun.sin_family = AF_INET;
     stun.sin_port = htons(8888);
-    //stun.sin_addr.s_addr = inet_addr("64.176.65.254");
-    stun.sin_addr.s_addr = inet_addr("127.0.0.1");
+    stun.sin_addr.s_addr = inet_addr("64.176.65.254");
+    //stun.sin_addr.s_addr = inet_addr("127.0.0.1");
     uint8_t buf[BUF_SIZE];
 
     tui_t okno;

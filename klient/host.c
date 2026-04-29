@@ -143,7 +143,14 @@ void send_punches(int sock, struct peer* who, tui_t* tui) {
     size_t len = build_frame(buf, MSG_PUNCH, NULL, 0); 
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(who[i].active) {
-            net_send(sock, buf, len, &who[i].used_addr);
+            if(who[i].used_addr.sin_addr.s_addr != 0) {
+                //connected
+                net_send(sock, buf, len, &who[i].used_addr);
+            } else {
+                //jeszcze pending
+                net_send(sock, buf, len, &who[i].public_addr);
+                net_send(sock, buf, len, &who[i].local_addr);
+            }
             if(time(NULL) - who[i].timestamp >= TIMEOUT_PEER) {
                 tui_log(tui, "Peer %s wyrzucony z powodu timeoutu\n", who[i].nick);
                 memset(&who[i], 0, sizeof(struct peer));
@@ -235,13 +242,10 @@ void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *h
 
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(connected[i].active && 
-            (net_addr_compare(sender, &connected[i].public_addr) || 
-            net_addr_compare(sender, &connected[i].local_addr))) {
+           net_addr_compare(sender, &connected[i].used_addr)) {
             strncpy(connected[i].nick, pl->name, NICK_LEN);
             connected[i].nick[NICK_LEN-1] = '\0';
             connected[i].timestamp = time(NULL);
-            connected[i].used_addr = net_addr_compare(sender, &connected[i].public_addr) ? 
-            connected[i].public_addr : connected[i].local_addr;
             tui_log(tui, "Peer %s dołączył!\n", connected[i].nick);
             fflush(stdout);
 

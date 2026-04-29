@@ -74,8 +74,21 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                         host_addr_used = net_addr_compare(&host_addr_public, &sender) ? host_addr_public : host_addr_local;
                     } else { //informacja zeby zrobic punch
                         struct payload_punch* data = (struct payload_punch*)hdr->payload;
-                        host_addr_local = data->local_addr;
-                        host_addr_public = data->public_addr;
+                        
+                        memset(&host_addr_local, 0, sizeof(host_addr_local));
+                        memset(&host_addr_public, 0, sizeof(host_addr_public));
+                        host_addr_public.sin_family = AF_INET;
+                        host_addr_local.sin_family = AF_INET;
+                        host_addr_public.sin_addr.s_addr = data->public_addr.sin_addr.s_addr;
+                        host_addr_local.sin_addr.s_addr = data->local_addr.sin_addr.s_addr;
+                        host_addr_public.sin_port = data->public_addr.sin_port;
+                        host_addr_local.sin_port = data->local_addr.sin_port;
+                        tui_log(tui, "Serwer chce nas zsynchronizowac, mnie z:\n");
+                        tui_log(tui, "sin_family: %d\n", data->public_addr.sin_family);
+                        tui_log(tui, "PUB adres: %s\n", inet_ntoa(data->public_addr.sin_addr));
+                        tui_log(tui, "PUB port: %d\n", ntohs(data->public_addr.sin_port));
+                        tui_log(tui, "LOC adres: %s\n", inet_ntoa(data->local_addr.sin_addr));
+                        tui_log(tui, "LOC port: %d\n", ntohs(data->local_addr.sin_port));
                     }
                 } else if(hdr->type == MSG_ERROR) {
                     printf("%s\n", ((struct payload_error*)hdr->payload)->message);
