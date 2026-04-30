@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     stun.sin_port = htons(8888);
     stun.sin_addr.s_addr = inet_addr("64.176.65.254");
     //stun.sin_addr.s_addr = inet_addr("127.0.0.1");
-    uint8_t buf[BUF_SIZE];
+    //uint8_t buf[BUF_SIZE];
 
     tui_t okno;
     tui_init(&okno);
@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    char* nick = &okno.user_data.nick;
+    char* nick = okno.user_data.nick;
     while(1) {
         if(okno.user_data.mode == 0) {
             host_start(sock, &stun, nick, &okno);

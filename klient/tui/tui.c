@@ -1,7 +1,12 @@
+#define _POSIX_C_SOURCE 200112L //dla setenv
 #include "klient/tui/tui.h"
 #include <ncurses.h>
+#include <stdlib.h>
+#include <string.h>
 #include "../../common/protocol_mess.h"
 #include "../../common/protocol_STUN.h"
+#include "wrapping.h"
+#define UNUSED(x) (void)(x) //zeby kompilator nie krzyczal a funkcje mogly miec ladne interfejsy
 
 void tui_init(tui_t* tui) {
     setenv("ESCDELAY", "25", 1);
@@ -12,9 +17,9 @@ void tui_init(tui_t* tui) {
     int width = COLS;
 
     /*Czat po lewej, na dole pole do wpisywania, z prawej logi (1.618)*/
-    int chat_x = (float)COLS*0.618; int chat_y = LINES-4;
+    int chat_x = (float)width*0.618; int chat_y = height-4;
     int input_x = chat_x; int input_y = 4;
-    int log_x = COLS-chat_x; int log_y = LINES;
+    int log_x = width-chat_x; int log_y = height;
 
     *tui = (tui_t){
         .chat_win = newwin(chat_y, chat_x, 0, 0),
@@ -36,8 +41,7 @@ void tui_init(tui_t* tui) {
     box(tui->chat_win, 0, 0); box(tui->log_win, 0, 0); box(tui->input_win, 0, 0);
 
     //okno logow
-    int log_h, log_w;
-    getmaxyx(tui->log_win, log_h, log_w);
+    int log_h = getmaxy(tui->log_win); 
     scrollok(tui->log_win, TRUE);
     wsetscrreg(tui->log_win, 1, log_h - 2);
     idlok(tui->log_win, TRUE);
@@ -80,6 +84,7 @@ uint8_t tui_process_input(tui_t* tui) {
                 } break;
                 case TUI_LISTING: if(!tui->loading) { tui->mode = TUI_CHAT; tui->draw_current = tui_draw_loading; tui->loading = true; } break;
                 case TUI_CREATE: if(!tui->loading) { tui->mode = TUI_CHAT; tui->draw_current = tui_draw_loading; tui->loading = true; } break;
+                case TUI_EXIT: break;
                 case TUI_CHAT: break;
             }
             tui_handle_mode(tui);
@@ -140,38 +145,42 @@ uint8_t tui_process_input(tui_t* tui) {
 void tui_on_msg(tui_t* tui, const char *nick, const char *mess) {
     //tui_log(tui, "jestem w tui_on_msg!");
     if(tui->mode == TUI_CHAT) {
-        tui->history[tui->head].system = false;
-        strncpy(tui->history[tui->head].nick, nick, NICK_LEN - 1);
-        tui->history[tui->head].nick[NICK_LEN - 1] = '\0';
-        strncpy(tui->history[tui->head].msg, mess, MESS_LEN - 1);
-        tui->history[tui->head].msg[MESS_LEN - 1] = '\0';
+        chat_entry_t new_mess;
+        new_mess.system = false;
+        strncpy(new_mess.nick, nick, NICK_LEN - 1);
+        new_mess.nick[NICK_LEN - 1] = '\0';
+        strncpy(new_mess.msg, mess, MESS_LEN - 1);
+        new_mess.msg[MESS_LEN - 1] = '\0';
 
-        //glowa o jeden dalej
-        tui->head = (tui->head + 1) % MAX_HISTORY;
-
-        //cyklizm lol
-        if (tui->head == 0 && !tui->full) {
-            tui->full = true;
-        }
-
+        tui_add_mess(tui, new_mess);
         tui->draw_current(tui);
     }
 }
 
 void tui_on_join(tui_t* tui, const char *nick) {
+    if(tui->mode == TUI_CHAT) {
+        chat_entry_t new_mess;
+        new_mess.system = true;
+        snprintf(new_mess.nick, NICK_LEN, "system");
+        
+        // Składamy stringa bezpośrednio w docelowym miejscu
+        snprintf(new_mess.msg, MESS_LEN, "Peer %s dolaczyl!", nick);
 
+        tui_add_mess(tui, new_mess);
+        tui->draw_current(tui);
+    }
 }
 
 void tui_on_leave(tui_t* tui, const char *nick) {
-
+    UNUSED(tui); UNUSED(nick);
 }
 
 void tui_on_kick(tui_t* tui) {
-
+    UNUSED(tui);
 }
 
 void tui_on_frame(tui_t* tui, const char *dir, uint8_t type) {
-    
+    UNUSED(tui); UNUSED(dir); UNUSED(type);
 }
 
 
@@ -306,37 +315,66 @@ void tui_draw_chat(tui_t *tui) {
 
     int win_h, win_w;
     getmaxyx(tui->chat_win, win_h, win_w);
-    int max_display = win_h - 2;
+    
+    int usable_w = win_w - 2;
+    int bubble_w = (int)(usable_w * 0.7);
+    int current_y = win_h - 2; 
 
     int total = tui->full ? MAX_HISTORY : tui->head;
-    int to_draw = (total > max_display) ? max_display : total;
 
-    tui_log(tui, "max_display: %d", max_display);
-    tui_log(tui, "total: %d", total);
-    tui_log(tui, "to_draw: %d", to_draw);
-
-    //od najnowszej w dol (tablicy) i w gore (czatu)
-    for (int i = 0; i < to_draw; i++) {
-        //indeks w tablicy
+    //przechodzi przez cala historie ale ostatecznie i 
+    //tak wyswietli tyle wiadomosci ile sie miesci na ekranie
+    for (int i = 0; i < total; i++) {
         int idx = (tui->head - 1 - i + MAX_HISTORY) % MAX_HISTORY;
-        
         chat_entry_t *entry = &tui->history[idx];
-
-        //od dolu w gure
-        int y_pos = (win_h - 2) - i;
-
+        
+        bool is_me = (strcmp(entry->nick, tui->user_data.nick) == 0);
+        char display_msg[MESS_LEN + NICK_LEN + 10];
+        
         if (entry->system) {
-            mvwprintw(tui->chat_win, y_pos, 1, " * %s", entry->msg);
+            snprintf(display_msg, sizeof(display_msg), "* %s", entry->msg);
+        } else if (is_me) {
+            snprintf(display_msg, sizeof(display_msg), "%s", entry->msg);
         } else {
-            mvwprintw(tui->chat_win, y_pos, 1, "<%s> %s", entry->nick, entry->msg);
+            snprintf(display_msg, sizeof(display_msg), "<%s> %s", entry->nick, entry->msg);
         }
+
+        //plan zawijania wiadomosci
+        int target_w = entry->system ? usable_w : bubble_w;
+        wrapped_info_t info = wrap_text(display_msg, target_w);
+
+        //to nie pozwoli na wyswietlanie starych wiadomosci
+        if (current_y - info.count + 1 < 1) break;
+
+        int start_y = current_y - info.count + 1;
+
+        //rysowanie kazdej linii
+        for (int j = 0; j < info.count; j++) {
+            int line_len = info.line_lengths[j];
+            int line_off = info.line_offsets[j];
+            
+            int x = 1;
+            if (is_me && !entry->system) {
+                if(info.count > 1)
+                    x = win_w - target_w - 1;
+                else 
+                    x = win_w - line_len - 1;
+            }
+
+            if (is_me) wattron(tui->chat_win, A_BOLD);
+            mvwprintw(tui->chat_win, start_y + j, x, "%.*s", line_len, display_msg + line_off);
+            if (is_me) wattroff(tui->chat_win, A_BOLD);
+        }
+
+        current_y = start_y - 1;
+        if (current_y < 1) break;
     }
 
     wrefresh(tui->chat_win);
+
     wmove(tui->input_win, 1, tui->cursor + 3);
     wrefresh(tui->input_win);
 }
-
 
 void tui_draw_loading(tui_t *tui) {
     werase(tui->chat_win);
@@ -359,6 +397,10 @@ void tui_handle_mode(tui_t *tui) {
         } break;
         case TUI_CREATE: break;
         case TUI_CHAT: break;
+        case TUI_START: break;
+        case TUI_EXIT: break;
+        case TUI_MENU: break;
+        default: break;
     }
     tui->draw_current(tui);
 }
@@ -367,8 +409,7 @@ void tui_log(tui_t *tui, const char *format, ...) {
     va_list args;
     va_start(args, format);
 
-    int h, w;
-    getmaxyx(tui->log_win, h, w);
+    int h = getmaxy(tui->log_win); 
     wmove(tui->log_win, h - 2, 1);
 
     vw_printw(tui->log_win, format, args);
@@ -379,4 +420,21 @@ void tui_log(tui_t *tui, const char *format, ...) {
 
     wrefresh(tui->log_win);
     va_end(args);
+}
+
+//dodaje wiadomosc nowa
+void tui_add_mess(tui_t *tui, chat_entry_t entry) {
+    if(tui->mode == TUI_CHAT) {
+        tui->history[tui->head] = entry;
+
+        //glowa o jeden dalej
+        tui->head = (tui->head + 1) % MAX_HISTORY;
+
+        //cyklizm lol
+        if (tui->head == 0 && !tui->full) {
+            tui->full = true;
+        }
+
+        tui->draw_current(tui);
+    }
 }

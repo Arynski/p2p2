@@ -44,7 +44,7 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
 void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                       struct peer *connected, int *connected_count, tui_t* tui);
 void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
-                     struct peer *connected, int connected_count, tui_t* tui);
+                     struct peer *connected, int *connected_count, tui_t* tui);
 void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                        struct peer *connected, int *connected_count, tui_t* tui);
 void handle_chat_punch(int sock, struct sockaddr_in *sender, struct msg_header *hdr,

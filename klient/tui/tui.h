@@ -94,4 +94,7 @@ void tui_handle_mode(tui_t *tui);
 //pisze do log
 void tui_log(tui_t *tui, const char *format, ...);
 
+//dodaje wiadomosc nowa
+void tui_add_mess(tui_t *tui, chat_entry_t entry);
+
 #endif

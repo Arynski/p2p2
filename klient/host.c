@@ -5,6 +5,7 @@
 #include "handler.h"
 #include "common/protocol_mess.h"
 #include <sys/select.h>
+#define UNUSED(x) (void)(x) //zeby kompilator nie krzyczal a funkcje mogly miec ladne interfejsy
 
 void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
     uint8_t buf[BUF_SIZE];
@@ -31,10 +32,11 @@ void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
             } break;
             case HOST_STATE_WAITING_REGISTERED: {
                 int n = net_recv(sock, buf, BUF_SIZE, NULL);
-                if(n < sizeof(struct msg_header)) break;
+                if(n < 0) break; //timeout
+                if((size_t)n < sizeof(struct msg_header)) break; //krotka wiadomosc
                 struct msg_header *hdr = (struct msg_header *)buf;
                 if(hdr->type == MSG_REGISTERED) {
-                    struct payload_registered *ack = (struct payload_registered *)hdr->payload;
+                    //struct payload_registered *ack = (struct payload_registered *)hdr->payload;
                     tui_get_registered(tui);
                     stan = HOST_STATE_HOSTING;
                     tui_log(tui, "HOST_STATE_HOSTING!");
@@ -73,7 +75,7 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
 
     net_set_timeout(sock, 0, 10000); //timeout do czatowania
 
-    fd_set readfds;
+    //fd_set readfds;
     time_t last_ping = time(NULL);
     time_t last_keepalive = time(NULL);
     struct sockaddr_in sender;
@@ -87,8 +89,15 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                 case MSG_PUNCH:     handle_hosting_punch(sock, &sender, hdr,
                                                          pending_peers, &pending_count,
                                                          connected_peers, &connected_count, tui); break;
-                case CHAT_JOIN:     handle_chat_join(sock, &sender, hdr,
-                                                      connected_peers, &connected_count, tui); break;
+                case CHAT_JOIN: { 
+                    if(hdr->payload_len < sizeof(struct chat_payload_msg)) break;
+                    tui_log(tui, "CHAT_JOIN od %s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
+                    handle_chat_join(sock, &sender, hdr,
+                                     connected_peers, &connected_count, tui); 
+                    struct chat_payload_join *pl = (struct chat_payload_join *)hdr->payload;
+                    tui_on_join(tui, pl->name);
+                    break;
+                } 
                 case CHAT_LEAVE:    handle_chat_leave(sock, &sender, hdr,
                                                 connected_peers, &connected_count, tui); break;
                 case CHAT_MSG: {
@@ -167,6 +176,7 @@ void send_punches(int sock, struct peer* who, tui_t* tui) {
 }
 
 void broadcast_mess(int sock, struct peer* who, uint8_t* msg, struct sockaddr_in *sender, tui_t* tui) {
+    UNUSED(tui);
     size_t len = sizeof(struct msg_header) + ((struct msg_header*)msg)->payload_len;
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(who[i].active && !net_addr_compare(sender, &who[i].used_addr)) {
@@ -239,13 +249,16 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
         }
         //przy okazji wyslemy pierwsze do tego do ktorego mamy wyslac, na oba adresy, pub i loc
         size_t len = build_frame(resp, MSG_PUNCH, NULL, 0);
-        net_send(sock, resp, len, &(data->public_addr));
-        net_send(sock, resp, len, &(data->local_addr));
+        struct sockaddr_in target_addr1 = data->public_addr; //tu je odczytuje bo tam sa packed i moga tu nie byc tam gdzie myslimy ze sa, tak zadziala 
+        struct sockaddr_in target_addr2 = data->local_addr; 
+        net_send(sock, resp, len, &(target_addr1));
+        net_send(sock, resp, len, &(target_addr2));
     }
 }
 
 void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                       struct peer *connected, int *connected_count, tui_t* tui) {
+    UNUSED(connected_count);
     if(hdr->payload_len < sizeof(struct chat_payload_join)) return;
     struct chat_payload_join *pl = (struct chat_payload_join*)hdr->payload;
 
@@ -269,10 +282,11 @@ void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *h
 }
 
 void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
-                     struct peer *connected, int connected_count, tui_t* tui) {
+                     struct peer *connected, int* connected_count, tui_t* tui) {
+    UNUSED(connected_count);
     if(hdr->payload_len < sizeof(struct chat_payload_msg)) return;
     struct chat_payload_msg *pl = (struct chat_payload_msg*)hdr->payload;
-    char full_msg[NICK_LEN + MESS_LEN + 4];
+    //char full_msg[NICK_LEN + MESS_LEN + 4];
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(connected[i].active && net_addr_compare(sender, &connected[i].used_addr)) {
             strncpy(pl->name, connected[i].nick, NICK_LEN - 1);
@@ -288,6 +302,7 @@ void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hd
 
 void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                        struct peer *connected, int *connected_count, tui_t* tui) {
+    UNUSED(hdr);
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(connected[i].active && net_addr_compare(sender, &connected[i].used_addr)) {
             tui_log(tui, "Peer %s wyszedł!\n", connected[i].nick);
@@ -306,6 +321,7 @@ void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *
 
 void handle_chat_punch(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                      struct peer *connected, int connected_count) {
+    UNUSED(sock); UNUSED(hdr); UNUSED(connected_count);
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(connected[i].active && net_addr_compare(sender, &connected[i].used_addr)) {
             connected[i].timestamp = time(NULL);

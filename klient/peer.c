@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "peer.h"
 #include "common/network.h"
 #include "handler.h"
@@ -8,7 +9,6 @@
 #include <sys/select.h>
 
 void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
-    char nick[NICK_LEN];
     uint8_t buf[BUF_SIZE];
     peer_state_t stan = PEER_STATE_START;
     uint8_t lista_buf[sizeof(struct payload_list_resp) + sizeof(struct room_entry) * MAX_ROOMS];
@@ -28,7 +28,8 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
             }       
             case PEER_STATE_WAITING_LIST: {
                 int n = net_recv(sock, buf, BUF_SIZE, NULL);
-                if(n < sizeof(struct msg_header)) break; //śmieci
+                if(n < 0) break;
+                if((size_t)n < sizeof(struct msg_header)) break; //śmieci
                 struct msg_header* hdr = (struct msg_header*)buf;
                 if(hdr->type == MSG_LIST_RESP) {
                     memcpy(lista_buf, hdr->payload, ntohs(hdr->payload_len));
@@ -60,7 +61,8 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                 struct sockaddr_in sender;
                 int n = net_recv(sock, buf, BUF_SIZE, &sender); //maks 3 sekundy bedzie
                 fflush(stdout);
-                if(n < sizeof(struct msg_header)) break; //śmieci albo -1 czyli timeout
+                if(n < 0) break;
+                if((size_t)n < sizeof(struct msg_header)) break; //śmieci albo -1 czyli timeout
 
                 struct msg_header* hdr = (struct msg_header*)buf;
                 //odbiory
@@ -173,7 +175,6 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
  
         //wejście z klawiatury, jesli true to byl enter i wysylamy
         if(tui_process_input(tui)) {
-            char message[MESS_LEN];
             if(tui->input_buf[0] == '\0') continue;
  
             if(strcmp(tui->input_buf, "exit") == 0) {

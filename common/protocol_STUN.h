@@ -31,6 +31,14 @@ typedef enum {
     MSG_ERROR           = 0x09, //jak bedzie blad no 
 } msg_type_t;
 
+typedef enum {
+    ERR_ROOM_FULL = 1,
+    ERR_NOT_FOUND = 2,
+    ERR_UNAUTHORIZED = 3,
+    ERR_ROOM_NOT_EXISTS = 4,
+    ERR_TOO_MANY_ROOMS = 5
+} err_type_t;
+
 //ramka, nagłówek i różne payloady
 
 //moze isc w przyszlosci do wspolnego protocol.h
@@ -77,6 +85,7 @@ struct payload_punch {
 } __attribute__((packed));
 
 struct payload_error {
+    err_type_t code;
     char message[64];
 } __attribute__((packed));
 

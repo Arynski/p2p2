@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include "common/network.h"
 #include "common/protocol_STUN.h"
+#include "klient/handler.h"
 
 size_t build_frame(uint8_t *buf, uint8_t type, const void *payload, uint16_t payload_len) {
     struct msg_header *hdr = (struct msg_header *)buf;

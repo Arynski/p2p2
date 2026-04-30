@@ -1,5 +1,5 @@
-#ifndef HANDLER_H
-#define HANDLER_H
+#ifndef HANDLER_PEER_H
+#define HANDLER_PEER_H
 #include <stdint.h>
 #include <stddef.h>
 #include <arpa/inet.h>

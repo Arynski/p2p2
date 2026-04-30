@@ -1,4 +1,6 @@
 *.o
 serwer/egzek
 klient/egzek
-
+TODO.md
+klient/tui/egzek
+klient/tui/test.c

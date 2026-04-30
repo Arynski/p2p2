@@ -6,7 +6,9 @@
 #include <syslog.h>
 #include "common/network.h"
 #include "common/protocol_STUN.h"
-#include "room.h"
+#include "serwer/handler.h"
+#include "serwer/room.h"
+#define UNUSED(x) (void)(x) //zeby kompilator nie krzyczal a funkcje mogly miec ladne interfejsy
 
 static int payload_too_small(struct msg_header *hdr, size_t expected) {
     return ntohs(hdr->payload_len) < expected;
@@ -47,23 +49,21 @@ void handle_register(int sock, struct sockaddr_in *sender, struct msg_header *hd
     loc_addr.sin_addr.s_addr = data->host_local_ip;
     loc_addr.sin_port = data->host_local_port;
     int slot = room_add(data->name, sender, &loc_addr); 
-    uint8_t resp[BUF_SIZE]; //odsylana ramka
-    size_t len; 
-    if(slot == -1) {
-        //odsyla MSG_ERROR
-        struct payload_error err = {0};        
-        strncpy(err.message, "Nie udalo sie stworzyc pokoju! Istnieje juz maksymalna ilosc.", sizeof(err.message) - 1);
-        err.message[sizeof(err.message)-1] = '\0';
 
-        len = build_frame(resp, MSG_ERROR, &err, sizeof(err));
-    } else {
+    if(slot != -1) {
         //odsyla MSG_REGISTERED
+        uint8_t resp[BUF_SIZE]; //odsylana ramka
+        size_t len; 
+
         struct payload_registered reged;
         reged.room_id = htonl(rooms[slot].id); //zeby na pewno bylo w network_byte_order
 
         len = build_frame(resp, MSG_REGISTERED, &reged, sizeof(reged));
+        net_send(sock, resp, len, sender);
+    } else {
+        //odsyla ERROR
+        send_error(sock, sender, ERR_TOO_MANY_ROOMS, "Nie udalo sie stworzyc pokoju! Istnieje juz maksymalna ilosc.");
     }
-    net_send(sock, resp, len, sender);
 }   
 
 /*Obsługuje unregister, dezaktywuje pokój*/
@@ -71,11 +71,20 @@ void handle_unregister(int sock, struct sockaddr_in *sender, struct msg_header *
     if (payload_too_small(hdr, sizeof(struct payload_unregister)))
         return;
     struct payload_unregister *data = (struct payload_unregister *)hdr->payload;
-    room_remove(ntohl(data->room_id));
+    uint32_t id_to_remove = ntohl(data->room_id);
+    
+    struct room* to_delete = room_find(id_to_remove);
+    if(to_delete != NULL && net_addr_compare(&to_delete->public_host_addr, sender)) {
+        syslog(LOG_INFO, "Wyrejestrowano pokoj o id %d", id_to_remove);
+        room_remove(id_to_remove);
+    } else {
+        send_error(sock, sender, ERR_UNAUTHORIZED, "Blad! Nie mozesz usunac pokoju ktorego nie jestes hostem!");
+    }
 }
 
 /*Obsługuje ping z serwera*/
 void handle_ping(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
+    UNUSED(sock); UNUSED(hdr); //ciiii kompilator
     int index = room_find_by_host(sender);
     if(index == -1) return;
     rooms[index].last_ping = time(NULL);
@@ -83,6 +92,7 @@ void handle_ping(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
 
 /*Obsługuje żadanie listy pokojów*/
 void handle_list(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
+    UNUSED(hdr);
     uint8_t resp[sizeof(struct msg_header) + sizeof(struct payload_list_resp) + sizeof(struct room_entry) * MAX_ROOMS];
     
     struct payload_list_resp *resp_payload = (struct payload_list_resp *)(resp + sizeof(struct msg_header));
@@ -134,13 +144,19 @@ void handle_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
         net_send(sock, respHost, lenHost, &jointo->public_host_addr);
         net_send(sock, respPeer, lenPeer, sender);
     } else {
-        //przesylamy blad, ze proba polaczenia z nieistniejacym pokojem
-        uint8_t resp[sizeof(struct msg_header) + sizeof(struct payload_error)];
-        struct payload_error err = {0};
-        strncpy(err.message, "Blad! Proba polaczenia z nieistniejacym pokojem!", sizeof(err.message) - 1);
-        err.message[sizeof(err.message) - 1] = '\0';
-        int len = build_frame(resp, MSG_ERROR, &err, sizeof(err));
-        
-        net_send(sock, resp, len, sender);
+        send_error(sock, sender, ERR_ROOM_NOT_EXISTS, "Blad! Proba polaczenia z nieistniejacym pokojem!");
     }
+}
+
+/*Wysyla do to_whom ramke z errorem o podanym code oraz z wiadomoscia mess*/
+void send_error(int sock, struct sockaddr_in *to_whom, err_type_t code, char* mess) {
+    syslog(LOG_NOTICE, "Wysylanie bledu %d do %s: %s", code, inet_ntoa(to_whom->sin_addr), mess);
+    uint8_t resp[sizeof(struct msg_header) + sizeof(struct payload_error)];
+    struct payload_error err = {0};
+    strncpy(err.message, mess, sizeof(err.message) - 1);
+    err.message[sizeof(err.message) - 1] = '\0';
+    err.code = code;
+    int len = build_frame(resp, MSG_ERROR, &err, sizeof(err));
+        
+    net_send(sock, resp, len, to_whom);
 }

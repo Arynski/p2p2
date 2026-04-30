@@ -24,7 +24,8 @@ size_t build_frame(uint8_t *buf, uint8_t type, const void *payload, uint16_t pay
 /*Obsługuje wiadomosc typu register, tworzy nowy pokój (jak może)*/
 void handle_register(int sock, struct sockaddr_in *sender, struct msg_header *hdr);
 
-/*Obsługuje unregister, dezaktywuje pokój*/
+/*Obsługuje unregister, dezaktywuje pokój jesli podany pokoj jest aktywny i jesli
+te wiadomosc wyslal jego host!*/
 void handle_unregister(int sock, struct sockaddr_in *sender, struct msg_header *hdr);
 
 /*Obsługuje ping z serwera*/
@@ -38,6 +39,9 @@ void handle_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr);
 
 /*Sprawdza jaki jest rodzaj i wybiera odpowiednia funkcje z handle*/
 void handle_payload(int sock, struct sockaddr_in *sender, struct msg_header *hdr);
+
+/*Wysyla do to_whom ramke z errorem o podanym code oraz z wiadomoscia mess*/
+void send_error(int sock, struct sockaddr_in *to_whom, err_type_t code, char* mess);
 
 
 #endif
