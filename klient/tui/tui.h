@@ -43,6 +43,7 @@ typedef struct tui_s {
     //kiedy cos wpisuje
     char    input_buf[MESS_LEN];
     int     input_len;
+    int     input_max_len;
     int     cursor;
     //kiedy cos wybiera
     int option;
@@ -74,6 +75,7 @@ void tui_on_msg(tui_t* tui, const char *nick, const char *mess);
 void tui_on_join(tui_t* tui, const char *nick);
 void tui_on_leave(tui_t* tui, const char *nick);
 void tui_on_kick(tui_t* tui);
+void tui_on_close_room(tui_t* tui);
 void tui_on_frame(tui_t* tui, const char *dir, uint8_t type);
 
 //obsluguja zdarzenia sieciowe?
@@ -89,12 +91,22 @@ void tui_draw_list(tui_t *tui);
 void tui_draw_loading(tui_t *tui);
 void tui_draw_create(tui_t *tui);
 void tui_draw_chat(tui_t *tui);
+void tui_draw_input(tui_t *tui);
 void tui_handle_mode(tui_t *tui);
+
 
 //pisze do log
 void tui_log(tui_t *tui, const char *format, ...);
 
 //dodaje wiadomosc nowa
 void tui_add_mess(tui_t *tui, chat_entry_t entry);
+
+void tui_resize_windows(tui_t* tui);
+
+//wychodzi z czatu znowu do menu glownego
+void tui_exit_chat(tui_t* tui);
+
+//do przechodzenia do menu
+void tui_go_to_menu(tui_t* tui);
 
 #endif

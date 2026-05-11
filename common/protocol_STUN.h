@@ -6,6 +6,7 @@
 
 #define BUF_SIZE 1024
 #define MAX_ROOMS 16
+#define ROOM_NAME_LEN 64
 
 /*
 w zasadzie musi: 

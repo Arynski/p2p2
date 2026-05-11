@@ -117,7 +117,11 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
 
         if(tui_process_input(tui)) {
             if(tui->input_buf[0] == '\0') continue;
-            if(strcmp(tui->input_buf, "exit") == 0) break;
+            if(strcmp(tui->input_buf, "/exit") == 0) {
+                close_room(sock, connected_peers, tui);
+                tui_exit_chat(tui);
+                return;
+            }
 
             struct chat_payload_msg data;
             strncpy(data.name, n, NICK_LEN - 1);
@@ -181,6 +185,21 @@ void broadcast_mess(int sock, struct peer* who, uint8_t* msg, struct sockaddr_in
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(who[i].active && !net_addr_compare(sender, &who[i].used_addr)) {
             net_send(sock, msg, len, &who[i].used_addr);
+        }
+    }
+}
+
+void close_room(int sock, struct peer* who, tui_t* tui) {
+    UNUSED(tui);
+    uint8_t buf[BUF_SIZE];
+    size_t len = build_frame(buf, CHAT_CLOSE_ROOM, NULL, 0); 
+    
+    for(int i = 0; i < MAX_PEERS; ++i) {
+        if(who[i].active) {
+            if(who[i].used_addr.sin_addr.s_addr != 0) {
+                //connected
+                net_send(sock, buf, len, &who[i].used_addr);
+            }
         }
     }
 }
@@ -303,17 +322,20 @@ void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hd
 void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                        struct peer *connected, int *connected_count, tui_t* tui) {
     UNUSED(hdr);
+    struct chat_payload_leave* pl = (struct chat_payload_leave*)hdr->payload;
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(connected[i].active && net_addr_compare(sender, &connected[i].used_addr)) {
+            strncpy(pl->name, connected[i].nick, NICK_LEN - 1);
+            pl->name[NICK_LEN - 1] = '\0';
             tui_log(tui, "Peer %s wyszedł!\n", connected[i].nick);
+            tui_on_leave(tui, connected[i].nick);
             fflush(stdout);
-            // rozsyłamy informację o wyjściu
-            uint8_t buf[BUF_SIZE];
-            build_frame(buf, CHAT_LEAVE, NULL, 0);
             // przed zerowaniem zapisz adres, potem rozsyłamy do pozostałych
             memset(&connected[i], 0, sizeof(struct peer));
             (*connected_count)--;
-            broadcast_mess(sock, connected, buf, sender, tui);
+
+            // rozsyłamy oryginalną ramkę dalej (z pewnym nickiem)
+            broadcast_mess(sock, connected, (uint8_t*)hdr, sender, tui);
             return;
         }
     }

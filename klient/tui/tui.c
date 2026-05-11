@@ -26,6 +26,7 @@ void tui_init(tui_t* tui) {
         .log_win = newwin(log_y, log_x, 0, chat_x),
         .input_win = newwin(input_y, input_x, chat_y, 0),
         .input_len = 0,
+        .input_max_len = NICK_LEN,
         .cursor = 0,
         .option = 0,
         .num_options = 0,
@@ -58,6 +59,7 @@ void tui_init(tui_t* tui) {
 }
 
 uint8_t tui_process_input(tui_t* tui) {
+    //tui_log(tui, "erm stan %d", tui->mode);
     int in = wgetch(tui->input_win);
     switch(in) {
         case ERR: break;
@@ -68,22 +70,31 @@ uint8_t tui_process_input(tui_t* tui) {
                 case TUI_START: {
                     strncpy(tui->user_data.nick, tui->input_buf, NICK_LEN - 1);
                     tui->user_data.nick[NICK_LEN - 1] = '\0';
-                    tui->mode = TUI_MENU;
-                    memset(tui->input_buf, 0, MESS_LEN);
-                    tui->input_len = 0;
-                    tui->cursor = 0;
-                    tui->num_options = 3;
-                    tui->draw_current = tui_draw_menu;
+                    tui_go_to_menu(tui);
                 } break;
                 case TUI_MENU: {
                     switch(tui->option) {
-                        case 0: tui->user_data.mode = 1; tui->rooms_count = -1; tui->draw_current = tui_draw_loading; tui->loading = true; tui->mode = TUI_LISTING; break;
-                        case 1: tui->user_data.mode = 0; tui->mode = TUI_CREATE; tui->draw_current = tui_draw_create; break;
-                        case 2: tui->mode = TUI_EXIT; break;
+                        case 0: { 
+                            tui->user_data.mode = 1; tui->rooms_count = -1; 
+                            tui->draw_current = tui_draw_loading; tui->loading = true; 
+                            tui->mode = TUI_LISTING; 
+                        } break;
+                        case 1: { 
+                            tui->user_data.mode = 0; tui->mode = TUI_CREATE; 
+                            tui->input_max_len = ROOM_NAME_LEN; tui->draw_current = tui_draw_create; 
+                        } break;
+                        case 2: { 
+                            tui->mode = TUI_EXIT; 
+                        } break;
                     }
                 } break;
-                case TUI_LISTING: if(!tui->loading) { tui->mode = TUI_CHAT; tui->draw_current = tui_draw_loading; tui->loading = true; } break;
-                case TUI_CREATE: if(!tui->loading) { tui->mode = TUI_CHAT; tui->draw_current = tui_draw_loading; tui->loading = true; } break;
+                case TUI_LISTING:
+                case TUI_CREATE: {
+                    if(!tui->loading) { 
+                        tui->mode = TUI_CHAT; tui->draw_current = tui_draw_loading; 
+                        tui->loading = true; tui->input_max_len = MESS_LEN; 
+                    } 
+                }break;
                 case TUI_EXIT: break;
                 case TUI_CHAT: break;
             }
@@ -119,8 +130,11 @@ uint8_t tui_process_input(tui_t* tui) {
                 tui->draw_current(tui);
             }
         } break;
+        case KEY_RESIZE: {
+            tui_resize_windows(tui);
+        } break;
         default: {
-            if(in >= 32 && in <= 126 && tui->input_len < MESS_LEN - 1) {
+            if(in >= 32 && in <= 126 && tui->input_len < tui->input_max_len - 1) {
                 memmove(&tui->input_buf[tui->cursor+1], &tui->input_buf[tui->cursor],
                     tui->input_len - tui->cursor + 1);
                 tui->input_buf[tui->cursor] = in;
@@ -130,15 +144,7 @@ uint8_t tui_process_input(tui_t* tui) {
         } break;
     }
 
-    wmove(tui->input_win, 1, 1);
-    wclrtoeol(tui->input_win);
-    
-    mvwprintw(tui->input_win, 1, 1, "> %s", tui->input_buf);
-    
-    box(tui->input_win, 0, 0);
-    wmove(tui->input_win, 1, tui->cursor + 3);
-    
-    wrefresh(tui->input_win);
+    tui_draw_input(tui);
     return false;
 }
 
@@ -163,7 +169,6 @@ void tui_on_join(tui_t* tui, const char *nick) {
         new_mess.system = true;
         snprintf(new_mess.nick, NICK_LEN, "system");
         
-        // Składamy stringa bezpośrednio w docelowym miejscu
         snprintf(new_mess.msg, MESS_LEN, "Peer %s dolaczyl!", nick);
 
         tui_add_mess(tui, new_mess);
@@ -172,11 +177,31 @@ void tui_on_join(tui_t* tui, const char *nick) {
 }
 
 void tui_on_leave(tui_t* tui, const char *nick) {
-    UNUSED(tui); UNUSED(nick);
+    if(tui->mode == TUI_CHAT) {
+        chat_entry_t new_mess;
+        new_mess.system = true;
+        snprintf(new_mess.nick, NICK_LEN, "system");
+        
+        snprintf(new_mess.msg, MESS_LEN, "Peer %s wyszedl!", nick);
+
+        tui_add_mess(tui, new_mess);
+        tui->draw_current(tui);
+    }
 }
 
 void tui_on_kick(tui_t* tui) {
     UNUSED(tui);
+}
+
+void tui_on_close_room(tui_t* tui) {
+    if(tui->mode == TUI_CHAT) {
+        chat_entry_t new_mess;
+        new_mess.system = true;
+        snprintf(new_mess.nick, NICK_LEN, "system");
+        snprintf(new_mess.msg, MESS_LEN, "Host zamknal pokoj! Wiecej wiadomosci nie przyjdzie");
+        tui_add_mess(tui, new_mess);
+        tui->draw_current(tui);
+    }
 }
 
 void tui_on_frame(tui_t* tui, const char *dir, uint8_t type) {
@@ -376,6 +401,46 @@ void tui_draw_chat(tui_t *tui) {
     wrefresh(tui->input_win);
 }
 
+void tui_draw_input(tui_t *tui) {
+    werase(tui->input_win);
+    box(tui->input_win, 0, 0);
+    
+    int rows, cols;
+    getmaxyx(tui->input_win, rows, cols);
+    int max_width = cols - 2;
+
+    int cursor_line = (tui->cursor + 2) / max_width;
+
+    int start_line = (cursor_line > 0) ? (cursor_line - 1) : 0;
+
+    for (int i = 0; i < 2; i++) {
+        int logical_line = start_line + i;
+        int char_offset = (logical_line * max_width);
+        
+        if (logical_line == 0) {
+            char line_buf[cols];
+            memset(line_buf, 0, sizeof(line_buf));
+            strncpy(line_buf, tui->input_buf, max_width - 2);
+            mvwprintw(tui->input_win, 1, 1, "> %s", line_buf);
+        } 
+        else {
+            int effective_offset = char_offset - 2; 
+            if (effective_offset >= 0 && effective_offset < strlen(tui->input_buf)) {
+                char line_buf[cols];
+                memset(line_buf, 0, sizeof(line_buf));
+                strncpy(line_buf, tui->input_buf + effective_offset, max_width);
+                mvwprintw(tui->input_win, i + 1, 1, "%s", line_buf);
+            }
+        }
+    }
+
+    int cursor_y = (cursor_line - start_line) + 1;
+    int cursor_x = (tui->cursor + 2) % max_width + 1;
+    wmove(tui->input_win, cursor_y, cursor_x);
+
+    wrefresh(tui->input_win);
+}
+
 void tui_draw_loading(tui_t *tui) {
     werase(tui->chat_win);
     char* msg = "Ladowanie...";
@@ -437,4 +502,58 @@ void tui_add_mess(tui_t *tui, chat_entry_t entry) {
 
         tui->draw_current(tui);
     }
+}
+
+void tui_resize_windows(tui_t* tui) {
+    int height = LINES;
+    int width = COLS;
+    
+    /*Czat po lewej, na dole pole do wpisywania, z prawej logi (1.618)*/
+    int chat_x = (float)width*0.618; int chat_y = height-4;
+    int input_x = chat_x; int input_y = 4;
+    int log_x = width-chat_x; int log_y = height;
+    wresize(tui->chat_win, chat_y, chat_x);
+    mvwin(tui->chat_win, 0, 0);
+    wresize(tui->log_win, log_y, log_x);
+    mvwin(tui->log_win, 0, chat_x);
+    wresize(tui->input_win, input_y, input_x);
+    mvwin(tui->input_win, chat_y, 0);
+
+    werase(tui->chat_win);
+    werase(tui->log_win);
+    werase(tui->input_win);
+
+    int log_h = getmaxy(tui->log_win); 
+    scrollok(tui->log_win, TRUE);
+    wsetscrreg(tui->log_win, 1, log_h - 2);
+    idlok(tui->log_win, TRUE);
+
+    tui->draw_current(tui);
+    tui_draw_input(tui);
+    wrefresh(tui->log_win);
+    tui_log(tui, "resize okna sie powiodl!");
+}
+
+void tui_exit_chat(tui_t* tui) {
+    if(tui->mode == TUI_CHAT) {
+        memset(tui->history, 0, sizeof(tui->history));
+        memset(tui->rooms, 0, sizeof(tui->rooms));
+        tui->head = 0;
+        tui->full = false;
+
+        memset(tui->rooms, 0, sizeof(tui->rooms));
+        tui->rooms_count = -1;
+        tui->rooms_count = 0;
+        tui_go_to_menu(tui);
+    }
+}
+
+void tui_go_to_menu(tui_t* tui) {
+    tui->mode = TUI_MENU;
+    memset(tui->input_buf, 0, MESS_LEN);
+    tui->input_len = 0;
+    tui->cursor = 0;
+    tui->num_options = 3;
+    tui->draw_current = tui_draw_menu;
+    tui->draw_current(tui);
 }

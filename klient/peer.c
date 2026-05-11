@@ -161,7 +161,8 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
                     break;
                 }
                 case CHAT_LEAVE: {
-                    tui_on_leave(tui, "???");
+                    struct chat_payload_leave* pl = (struct chat_payload_leave*)hdr->payload;
+                    tui_on_leave(tui, pl->name);
                     break;
                 }
                 case CHAT_KICK: {
@@ -171,6 +172,10 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
                     net_send(sock, buf, len, host);
                     return;
                 }
+                case CHAT_CLOSE_ROOM: {
+                    tui_on_close_room(tui);
+                    break;
+                }
                 default: break;
             }
         }
@@ -179,9 +184,14 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
         if(tui_process_input(tui)) {
             if(tui->input_buf[0] == '\0') continue;
  
-            if(strcmp(tui->input_buf, "exit") == 0) {
-                len = build_frame(buf, CHAT_LEAVE, NULL, 0);
+            if(strcmp(tui->input_buf, "/exit") == 0) {
+                struct chat_payload_leave pl;
+                strncpy(pl.name, tui->user_data.nick, NICK_LEN - 1);
+                pl.name[NICK_LEN - 1] = '\0';
+                len = build_frame(buf, CHAT_LEAVE, &pl, sizeof(pl));
                 net_send(sock, buf, len, host);
+
+                tui_exit_chat(tui);
                 return;
             }
  

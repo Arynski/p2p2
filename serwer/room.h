@@ -9,7 +9,7 @@
 
 struct room {
     uint32_t        id;
-    char            name[64];
+    char            name[ROOM_NAME_LEN];
     struct sockaddr_in public_host_addr;
     struct sockaddr_in local_host_addr;
     time_t          last_ping;

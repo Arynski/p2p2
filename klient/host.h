@@ -35,6 +35,8 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui);
 void send_punches(int sock, struct peer* who, tui_t* tui);
 /*przyjmuje socket, liste peerow i ramke z wiadomoscia, typu CHAT_MSG ktora wysyla*/
 void broadcast_mess(int sock, struct peer* who, uint8_t* msg, struct sockaddr_in *sender, tui_t* tui);
+/*jak host chce wyjsc to do wszystkich wysylamy ze no wyszedl nara*/
+void close_room(int sock, struct peer* who, tui_t* tui);
 
 //handlery
 void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_header *hdr,

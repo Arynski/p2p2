@@ -30,14 +30,14 @@ int main(int argc, char** argv) {
     tui_init(&okno);
 
     while(1) {
-        if(tui_process_input(&okno)) {
-            if(okno.mode == TUI_LISTING || okno.mode == TUI_CREATE) 
-                break; 
+        while(1) {
+            if(tui_process_input(&okno)) {
+                if(okno.mode == TUI_LISTING || okno.mode == TUI_CREATE) 
+                    break; 
+            }
         }
-    }
-
-    char* nick = okno.user_data.nick;
-    while(1) {
+        
+        char* nick = okno.user_data.nick;
         if(okno.user_data.mode == 0) {
             host_start(sock, &stun, nick, &okno);
         } else if(okno.user_data.mode == 1) {
@@ -46,4 +46,5 @@ int main(int argc, char** argv) {
             break;
         }
     }
+    return 0;
 }

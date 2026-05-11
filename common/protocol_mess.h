@@ -10,6 +10,7 @@ typedef enum {
     CHAT_MSG        = 0x04, // wiadomość tekstowa
     CHAT_KICK       = 0x05, // host kickuje peera
     CHAT_LEAVE      = 0x06, // peer wychodzi
+    CHAT_CLOSE_ROOM = 0x07, // host zamyka pokoj
 } chat_msg_type_t;
 
 //nagłówek taki jak w protocol_stun.h
@@ -27,6 +28,11 @@ struct chat_payload_msg {
 struct chat_payload_kick {
     char reason[MESS_LEN];
 } __attribute__((packed));
+
+struct chat_payload_leave {
+    char name[NICK_LEN];
+} __attribute__((packed));
+
 
 
 #endif
