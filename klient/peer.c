@@ -59,6 +59,22 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
             }
             case PEER_STATE_CONNECTING: {
                 struct sockaddr_in sender;
+                
+                //wyslanie co 3 sekundy od kiedy znamy hosta (wystarczy sprawdzac public nawet jak wysylane na oba)
+                if(host_addr_public.sin_addr.s_addr != 0) {
+                    size_t len = build_frame(buf, MSG_PUNCH, NULL, 0);
+                    tui_log(tui, "Wysylam punch do PUB: %s:%d family:%d", 
+                        inet_ntoa(host_addr_public.sin_addr), 
+                        ntohs(host_addr_public.sin_port),
+                        host_addr_public.sin_family);
+                    tui_log(tui, "Wysylam punch do LOC: %s:%d family:%d",
+                        inet_ntoa(host_addr_local.sin_addr),
+                        ntohs(host_addr_local.sin_port),
+                        host_addr_local.sin_family);
+                    net_send(sock, buf, len, &host_addr_public);
+                    net_send(sock, buf, len, &host_addr_local);
+                }
+
                 int n = net_recv(sock, buf, BUF_SIZE, &sender); //maks 3 sekundy bedzie
                 fflush(stdout);
                 if(n < 0) break;
@@ -89,20 +105,6 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                 } else if(hdr->type == MSG_ERROR) {
                     printf("%s\n", ((struct payload_error*)hdr->payload)->message);
                     stan = PEER_STATE_BROWSING;
-                }
-                //wyslanie co 3 sekundy od kiedy znamy hosta (wystarczy sprawdzac public nawet jak wysylane na oba)
-                if(host_addr_public.sin_addr.s_addr != 0) {
-                    size_t len = build_frame(buf, MSG_PUNCH, NULL, 0);
-                    tui_log(tui, "Wysylam punch do PUB: %s:%d family:%d", 
-                        inet_ntoa(host_addr_public.sin_addr), 
-                        ntohs(host_addr_public.sin_port),
-                        host_addr_public.sin_family);
-                    tui_log(tui, "Wysylam punch do LOC: %s:%d family:%d",
-                        inet_ntoa(host_addr_local.sin_addr),
-                        ntohs(host_addr_local.sin_port),
-                        host_addr_local.sin_family);
-                    net_send(sock, buf, len, &host_addr_public);
-                    net_send(sock, buf, len, &host_addr_local);
                 }
                 break;
             }

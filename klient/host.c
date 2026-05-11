@@ -177,7 +177,7 @@ void send_punches(int sock, struct peer* who, tui_t* tui) {
 
 void broadcast_mess(int sock, struct peer* who, uint8_t* msg, struct sockaddr_in *sender, tui_t* tui) {
     UNUSED(tui);
-    size_t len = sizeof(struct msg_header) + ((struct msg_header*)msg)->payload_len;
+    size_t len = sizeof(struct msg_header) + ntohs(((struct msg_header*)msg)->payload_len);
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(who[i].active && !net_addr_compare(sender, &who[i].used_addr)) {
             net_send(sock, msg, len, &who[i].used_addr);
