@@ -4,3 +4,5 @@ klient/egzek
 TODO.md
 klient/tui/egzek
 klient/tui/test.c
+build/
+tests.sh
