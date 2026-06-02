@@ -32,7 +32,7 @@ typedef enum {
 } hosting_state_t;
 
 void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8_t* host_pub, uint8_t* host_sec);
-void host_hosting(int sock, struct sockaddr_in *host, char* n, tui_t* tui, uint8_t* host_pub, uint8_t* host_sec);
+void host_hosting(int sock, struct sockaddr_in *host, char* n, tui_t* tui, uint8_t* host_pub, uint8_t* host_sec, uint32_t r_idx);
 
 /*zarowno wysyla punche do wszystkich z who jak i sprawdza czasy timeoutow i wyrzuca nieaktywnych*/
 void send_punches(int sock, struct peer* who, tui_t* tui);

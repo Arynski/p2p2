@@ -11,12 +11,13 @@ void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8
     uint8_t buf[BUF_SIZE];
     host_start_state_t stan = HOST_STATE_START;
     tui_log(tui, "HOST_STATE_START!");
+    uint32_t room_id = 0;
     while(1) {
         switch(stan) {
             case HOST_STATE_START: {
                 if(tui_process_input(tui)) { //czekamy na enter
                     //wyslanie register
-                    
+                    if(tui->mode == TUI_MENU) return; // wyszedl przez /exit
                     struct sockaddr_in local_ip = net_get_local_sockaddr(sock);
                     struct payload_register data = {0};
                     strncpy(data.name, tui->input_buf, 64);
@@ -36,7 +37,8 @@ void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8
                 if((size_t)n < sizeof(struct msg_header)) break; //krotka wiadomosc
                 struct msg_header *hdr = (struct msg_header *)buf;
                 if(hdr->type == MSG_REGISTERED) {
-                    //struct payload_registered *ack = (struct payload_registered *)hdr->payload;
+                    struct payload_registered *ack = (struct payload_registered *)hdr->payload;
+                    room_id = ntohl(ack->room_id);
                     tui_get_registered(tui);
                     stan = HOST_STATE_HOSTING;
                     tui_log(tui, "HOST_STATE_HOSTING!");
@@ -48,13 +50,13 @@ void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8
             }
             case HOST_STATE_HOSTING:
                 tui_log(tui, "DO NOWEJ FUNKCJI!");
-                host_hosting(sock, server, n, tui, host_pub, host_sec);
+                host_hosting(sock, server, n, tui, host_pub, host_sec, room_id);
                 return;
         }
     }
 }
 
-void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8_t* host_pub, uint8_t* host_sec) {
+void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8_t* host_pub, uint8_t* host_sec, uint32_t r_idx) {
     uint8_t buf[BUF_SIZE];
     struct peer pending_peers[MAX_PEERS];  //w trakcie hole punching
     struct peer connected_peers[MAX_PEERS]; //połączeni
@@ -117,6 +119,13 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uin
         if(tui_process_input(tui)) {
             if(tui->input_buf[0] == '\0') continue;
             if(strcmp(tui->input_buf, "/exit") == 0) {
+                //wyrejestrowanie
+                struct payload_unregister unreg;
+                unreg.room_id = htonl(r_idx); // potrzebujesz tu znać room_id
+                uint8_t ubuf[sizeof(struct msg_header) + sizeof(struct payload_unregister)];
+                size_t ulen = build_frame(ubuf, MSG_UNREGISTER, &unreg, sizeof(unreg));
+                net_send(sock, ubuf, ulen, server);
+                
                 close_room(sock, connected_peers, tui);
                 tui_exit_chat(tui);
                 return;
@@ -269,30 +278,29 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
         if((*pending_count) >= MAX_PEERS) { return; } 
         for(int i = 0; i < MAX_PEERS; ++i) {
             if(!pending[i].active) {
-                pending[i].active = 1;
                 struct sockaddr_in pub;
                 struct sockaddr_in loc;
                 memset(&pub, 0, sizeof(pub));
                 memset(&loc, 0, sizeof(loc));
+                pending[i].active = 1;
                 pub.sin_family = AF_INET;
-                pub.sin_addr.s_addr = data->public_addr.sin_addr.s_addr;
-                pub.sin_port = data->public_addr.sin_port;
+                pub.sin_addr.s_addr = data->public_ip;
+                pub.sin_port = data->public_port;
                 loc.sin_family = AF_INET;
-                loc.sin_addr.s_addr = data->local_addr.sin_addr.s_addr;
-                loc.sin_port = data->local_addr.sin_port;
+                loc.sin_addr.s_addr = data->local_ip;
+                loc.sin_port = data->local_port;
                 pending[i].local_addr = loc;
                 pending[i].public_addr = pub;
                 pending[i].timestamp = time(NULL);
                 (*pending_count)++;
+
+                //przy okazji wyslemy pierwsze do tego do ktorego mamy wyslac, na oba adresy, pub i loc
+                size_t len = build_frame(resp, MSG_PUNCH, NULL, 0);
+                net_send(sock, resp, len, &(pub));
+                net_send(sock, resp, len, &(loc));
                 break;
             }
         }
-        //przy okazji wyslemy pierwsze do tego do ktorego mamy wyslac, na oba adresy, pub i loc
-        size_t len = build_frame(resp, MSG_PUNCH, NULL, 0);
-        struct sockaddr_in target_addr1 = data->public_addr; //tu je odczytuje bo tam sa packed i moga tu nie byc tam gdzie myslimy ze sa, tak zadziala 
-        struct sockaddr_in target_addr2 = data->local_addr; 
-        net_send(sock, resp, len, &(target_addr1));
-        net_send(sock, resp, len, &(target_addr2));
     }
 }
 

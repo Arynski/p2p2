@@ -88,13 +88,26 @@ uint8_t tui_process_input(tui_t* tui) {
                         } break;
                     }
                 } break;
-                case TUI_LISTING:
+                case TUI_LISTING: {
+                    if(!tui->loading) {
+                        if(tui->option == tui->rooms_count) {
+                            tui_go_to_menu(tui);
+                        } else {
+                            tui->mode = TUI_CHAT;
+                            tui->draw_current = tui_draw_loading;
+                            tui->loading = true;
+                            tui->input_max_len = MESS_LEN;
+                        }
+                    }
+                } break;
                 case TUI_CREATE: {
-                    if(!tui->loading) { 
+                    if(strcmp(tui->input_buf, "/exit") == 0) {
+                        tui_go_to_menu(tui);
+                    } else if(!tui->loading) { 
                         tui->mode = TUI_CHAT; tui->draw_current = tui_draw_loading; 
                         tui->loading = true; tui->input_max_len = MESS_LEN; 
                     } 
-                }break;
+                } break;
                 case TUI_EXIT: break;
                 case TUI_CHAT: break;
             }
@@ -217,7 +230,7 @@ void tui_get_list(tui_t* tui, struct payload_list_resp *pokoje) {
         if (tui->rooms_count > MAX_ROOMS) tui->rooms_count = MAX_ROOMS;
         memcpy(tui->rooms, pokoje->rooms, tui->rooms_count * sizeof(struct room_entry));
             
-        tui->num_options = tui->rooms_count;
+        tui->num_options = tui->rooms_count + 1;
         tui->option = 0;
         tui->loading = false;
         tui->draw_current = tui_draw_list;
@@ -302,7 +315,8 @@ void tui_draw_list(tui_t *tui) {
 
     mvwprintw(tui->chat_win, 2, 2, "Witaj '%s'!", tui->user_data.nick);
     if(tui->rooms_count == 0) {
-        mvwprintw(tui->chat_win, 3, 3, "Niestety! Nikt nie hostuje pokoju. Popros kolege/kolezanke (jesli masz) o zahostowanie pokoju, albo zahostuj go sam!");
+        mvwprintw(tui->chat_win, 3, 3, "Brak aktywnych pokojow.");
+        mvwprintw(tui->chat_win, 4, 3, "Wróc do menu i zahostuj pokoj!");
     } else {
         for(int i = 0; i < tui->rooms_count; ++i) {
             if(tui->option == i) wattron(tui->chat_win, A_REVERSE | A_BOLD);
@@ -310,6 +324,11 @@ void tui_draw_list(tui_t *tui) {
             if(tui->option == i) wattroff(tui->chat_win, A_REVERSE | A_BOLD);
         }
     }
+    
+   if(tui->option == tui->rooms_count) wattron(tui->chat_win, A_REVERSE | A_BOLD);
+    int back_row = (tui->rooms_count == 0) ? 5 : 3 + tui->rooms_count;
+    mvwprintw(tui->chat_win, back_row, 3, "Wroc do menu");
+    if(tui->option == tui->rooms_count) wattroff(tui->chat_win, A_REVERSE | A_BOLD);
     wrefresh(tui->chat_win);
     
     // Ustawiamy kursor w oknie inputu
@@ -324,7 +343,8 @@ void tui_draw_create(tui_t *tui) {
     wrefresh(tui->chat_win);
 
     mvwprintw(tui->chat_win, 2, 2, "Witaj '%s'!", tui->user_data.nick);
-    mvwprintw(tui->chat_win, 3, 3, "Prosze podaj nazwe swojego pokoju");
+    mvwprintw(tui->chat_win, 3, 3, "Prosze podaj nazwe swojego pokoju"); 
+    mvwprintw(tui->chat_win, 4, 3, "(/exit aby wrocic do menu)");
     wrefresh(tui->chat_win);
     
     // Ustawiamy kursor w oknie inputu

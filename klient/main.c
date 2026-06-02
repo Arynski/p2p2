@@ -43,6 +43,7 @@ int main(int argc, char** argv) {
     while(1) {
         while(1) {
             if(tui_process_input(&okno)) {
+                if(okno.mode == TUI_EXIT) goto done;
                 if(okno.mode == TUI_LISTING || okno.mode == TUI_CREATE) 
                     break; 
             }
@@ -57,5 +58,8 @@ int main(int argc, char** argv) {
             break;
         }
     }
+done:
+    endwin();
+    printf("Do widzenia!\n");
     return 0;
 }

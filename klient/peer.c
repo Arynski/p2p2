@@ -44,6 +44,7 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8
             }
             case PEER_STATE_BROWSING: {
                 if(tui_process_input(tui)) {
+                    if(tui->mode == TUI_MENU) return; //powrot
                     struct payload_join data;
                     struct sockaddr_in loc_addr = net_get_local_sockaddr(sock);
                     data.room_id = pokoje->rooms[tui->option].room_id;
@@ -97,10 +98,11 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8
                         memset(&host_addr_public, 0, sizeof(host_addr_public));
                         host_addr_public.sin_family = AF_INET;
                         host_addr_local.sin_family = AF_INET;
-                        host_addr_public.sin_addr.s_addr = data->public_addr.sin_addr.s_addr;
-                        host_addr_local.sin_addr.s_addr = data->local_addr.sin_addr.s_addr;
-                        host_addr_public.sin_port = data->public_addr.sin_port;
-                        host_addr_local.sin_port = data->local_addr.sin_port;
+
+                        host_addr_public.sin_addr.s_addr = data->public_ip;
+                        host_addr_local.sin_addr.s_addr = data->local_ip;
+                        host_addr_public.sin_port = data->public_port;
+                        host_addr_local.sin_port = data->local_port;
                     }
                 } else if(hdr->type == MSG_ERROR) {
                     printf("%s\n", ((struct payload_error*)hdr->payload)->message);

@@ -82,9 +82,12 @@ struct payload_join {
     uint16_t peer_local_port;     //port, na którym klient nasłuchuje
 } __attribute__((packed));
 
+//pakiet do synchronizacji, dla peera zawiera adresy/porty hosta, dla hosta peera
 struct payload_punch {
-    struct sockaddr_in public_addr;
-    struct sockaddr_in local_addr;
+    uint32_t public_ip;
+    uint16_t public_port;
+    uint32_t local_ip;
+    uint16_t local_port;
 } __attribute__((packed));
 
 struct payload_error {
