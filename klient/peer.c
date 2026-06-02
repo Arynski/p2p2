@@ -8,7 +8,7 @@
 #include "tui/tui.h"
 #include <sys/select.h>
 
-void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
+void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8_t* peer_pub, uint8_t* peer_sec) {
     uint8_t buf[BUF_SIZE];
     peer_state_t stan = PEER_STATE_START;
     uint8_t lista_buf[sizeof(struct payload_list_resp) + sizeof(struct room_entry) * MAX_ROOMS];
@@ -109,22 +109,25 @@ void peer_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                 break;
             }
             case PEER_STATE_CONNECTED: {
-                tui_get_join(tui);
-                peer_chat(sock, &host_addr_used, n, tui);
+                peer_chat(sock, &host_addr_used, n, tui, peer_pub, peer_sec);
                 return;
             } break;
         }
     }
 }
 
-void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
+void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui, uint8_t* peer_pub, uint8_t* peer_sec) {
     uint8_t buf[BUF_SIZE];
- 
-    //wysyla CHAT_JOIN
+    bool is_chatting = false;
+    uint8_t session_key_rx[crypto_kx_SESSIONKEYBYTES];
+    uint8_t session_key_tx[crypto_kx_SESSIONKEYBYTES];
 
+    //wysyla CHAT_JOIN
+    tui_log(tui, "Wysylam chat_join, typ %d", CHAT_JOIN);
     struct chat_payload_join join_pl;
     strncpy(join_pl.name, n, NICK_LEN - 1);
     join_pl.name[NICK_LEN - 1] = '\0';
+    memcpy(join_pl.public_key, peer_pub, crypto_kx_PUBLICKEYBYTES);
     size_t len = build_frame(buf, CHAT_JOIN, &join_pl, sizeof(join_pl));
     net_send(sock, buf, len, host);
     net_set_timeout(sock, 0, 10000); //timeout do czatowania
@@ -146,12 +149,37 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
         if(n > 0 && (size_t)n >= sizeof(struct msg_header)) {
             struct msg_header *hdr = (struct msg_header *)buf;
             tui_log(tui, "Przyszla wiadomosc, typ: %d", hdr->type);
+            if(!is_chatting && hdr->type != CHAT_JOIN_OK)
+                continue;
             switch(hdr->type) {
                 case CHAT_MSG: {
                     tui_log(tui, "CHAT_MSG od %s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
                     if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_msg)) break;
                     struct chat_payload_msg *pl = (struct chat_payload_msg *)hdr->payload;
-                    tui_on_msg(tui, pl->name, pl->mess);
+                    
+                    //odszyfrowac
+                    uint8_t nonce[crypto_stream_NONCEBYTES] = {0};
+                    char decoded[MESS_LEN];
+                    
+                    crypto_stream_xor((uint8_t*)decoded, (const uint8_t*)pl->mess, 
+                                    MESS_LEN, nonce, session_key_rx);
+                    decoded[MESS_LEN - 1] = '\0';
+
+                    tui_on_msg(tui, pl->name, decoded);
+                    break;
+                }
+                 case CHAT_JOIN_OK: {
+                    if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_join_ok)) break;
+                    struct chat_payload_join_ok *pl = (struct chat_payload_join_ok *)hdr->payload;
+                    
+                    if (crypto_kx_client_session_keys(session_key_rx, session_key_tx, 
+                                                      peer_pub, peer_sec, pl->public_key) != 0) {
+                        tui_log(tui, "Nie można wyliczyć klucza sesyjnego!");
+                        break;
+                    }
+
+                    tui_get_join(tui);
+                    is_chatting = true;
                     break;
                 }
                 case CHAT_JOIN: {
@@ -198,11 +226,16 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui) {
             struct chat_payload_msg data;
             strncpy(data.name, tui->user_data.nick, NICK_LEN - 1);
             data.name[NICK_LEN - 1] = '\0';
-            strncpy(data.mess, tui->input_buf, MESS_LEN - 1);
-            data.mess[MESS_LEN - 1] = '\0';
+            memset(data.mess, 0, MESS_LEN);
+
+            //szyfrowac
+            uint8_t nonce[crypto_stream_NONCEBYTES] = {0};
+            crypto_stream_xor((uint8_t*)data.mess, (const uint8_t*)tui->input_buf, 
+                            strlen(tui->input_buf) + 1, nonce, session_key_tx);
+
             len = build_frame(buf, CHAT_MSG, &data, sizeof(data));
             net_send(sock, buf, len, host);
-            tui_on_msg(tui, data.name, data.mess);
+            tui_on_msg(tui, data.name, tui->input_buf);
             tui_get_send(tui);
         }
     }

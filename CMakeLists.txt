@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 project(P2P2 C)
 
+set(CURSES_NEED_NCURSES TRUE)
 find_package(Curses REQUIRED)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SODIUM REQUIRED libsodium)
 
 set(COMMON_SOURCES
     common/network.c
@@ -16,8 +20,8 @@ add_executable(p2p2
     klient/peer.c
     ${COMMON_SOURCES}
 )
-target_include_directories(p2p2 PRIVATE ${CMAKE_SOURCE_DIR})
-target_link_libraries(p2p2 PRIVATE ${CURSES_LIBRARIES})
+target_include_directories(p2p2 PRIVATE ${CMAKE_SOURCE_DIR} ${SODIUM_INCLUDE_DIRS})
+target_link_libraries(p2p2 PRIVATE ${CURSES_LIBRARIES} ${SODIUM_LIBRARIES})
 
 # serwer p2p2
 add_executable(p2p2_serwer 
@@ -26,4 +30,5 @@ add_executable(p2p2_serwer
     serwer/handler.c
     ${COMMON_SOURCES}
 )
-target_include_directories(p2p2_serwer PRIVATE ${CMAKE_SOURCE_DIR})
+target_include_directories(p2p2_serwer PRIVATE ${CMAKE_SOURCE_DIR} ${SODIUM_INCLUDE_DIRS})
+target_link_libraries(p2p2_serwer PRIVATE ${SODIUM_LIBRARIES})

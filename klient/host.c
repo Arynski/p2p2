@@ -7,7 +7,7 @@
 #include <sys/select.h>
 #define UNUSED(x) (void)(x) //zeby kompilator nie krzyczal a funkcje mogly miec ladne interfejsy
 
-void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
+void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8_t* host_pub, uint8_t* host_sec) {
     uint8_t buf[BUF_SIZE];
     host_start_state_t stan = HOST_STATE_START;
     tui_log(tui, "HOST_STATE_START!");
@@ -48,13 +48,13 @@ void host_start(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
             }
             case HOST_STATE_HOSTING:
                 tui_log(tui, "DO NOWEJ FUNKCJI!");
-                host_hosting(sock, server, n, tui);
+                host_hosting(sock, server, n, tui, host_pub, host_sec);
                 return;
         }
     }
 }
 
-void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
+void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uint8_t* host_pub, uint8_t* host_sec) {
     uint8_t buf[BUF_SIZE];
     struct peer pending_peers[MAX_PEERS];  //w trakcie hole punching
     struct peer connected_peers[MAX_PEERS]; //połączeni
@@ -90,10 +90,10 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                                                          pending_peers, &pending_count,
                                                          connected_peers, &connected_count, tui); break;
                 case CHAT_JOIN: { 
-                    if(hdr->payload_len < sizeof(struct chat_payload_msg)) break;
+                    if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_join_ok)) break;
                     tui_log(tui, "CHAT_JOIN od %s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
                     handle_chat_join(sock, &sender, hdr,
-                                     connected_peers, &connected_count, tui); 
+                                     connected_peers, &connected_count, tui, host_sec, host_pub); 
                     struct chat_payload_join *pl = (struct chat_payload_join *)hdr->payload;
                     tui_on_join(tui, pl->name);
                     break;
@@ -101,12 +101,11 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
                 case CHAT_LEAVE:    handle_chat_leave(sock, &sender, hdr,
                                                 connected_peers, &connected_count, tui); break;
                 case CHAT_MSG: {
-                    if(hdr->payload_len < sizeof(struct chat_payload_msg)) break;
+                    if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_msg)) break;
                     tui_log(tui, "CHAT_MSG od %s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
                     handle_chat_msg(sock, &sender, hdr,
                                                 connected_peers, &connected_count, tui);
-                    struct chat_payload_msg *pl = (struct chat_payload_msg *)hdr->payload;
-                    tui_on_msg(tui, pl->name, pl->mess);
+                    
                     break;
                 } break;
                 case CHAT_PUNCH:    handle_chat_punch(sock, &sender, hdr,
@@ -128,9 +127,7 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui) {
             data.name[NICK_LEN - 1] = '\0';
             strncpy(data.mess, tui->input_buf, MESS_LEN - 1);
             data.mess[MESS_LEN - 1] = '\0';
-            uint8_t msgbuf[sizeof(struct msg_header) + sizeof(data)];
-            build_frame(msgbuf, CHAT_MSG, &data, sizeof(data));
-            broadcast_mess(sock, connected_peers, msgbuf, NULL, tui);
+            broadcast_mess(sock, connected_peers, data.name, data.mess, NULL, tui);
             tui_on_msg(tui, n, tui->input_buf);
             tui_get_send(tui);
         }
@@ -179,12 +176,36 @@ void send_punches(int sock, struct peer* who, tui_t* tui) {
     }
 }
 
-void broadcast_mess(int sock, struct peer* who, uint8_t* msg, struct sockaddr_in *sender, tui_t* tui) {
+void broadcast_pack(int sock, struct peer* who, uint8_t* msg, struct sockaddr_in *sender, tui_t* tui) {
     UNUSED(tui);
     size_t len = sizeof(struct msg_header) + ntohs(((struct msg_header*)msg)->payload_len);
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(who[i].active && !net_addr_compare(sender, &who[i].used_addr)) {
             net_send(sock, msg, len, &who[i].used_addr);
+        }
+    }
+}
+
+/*przyjmuje socket, liste peerow i ramke z wiadomoscia, typu MSG_CHAT ktora wysyla*/
+void broadcast_mess(int sock, struct peer* who, const char* sender_name, const char* clean_text, struct sockaddr_in *sender, tui_t* tui) {
+    UNUSED(tui);
+    uint8_t resp[BUF_SIZE];
+    struct chat_payload_msg to_send;
+
+    for(int i = 0; i < MAX_PEERS; ++i) {
+        if(who[i].active && !net_addr_compare(sender, &who[i].used_addr)) {
+            memset(&to_send, 0, sizeof(to_send));
+
+            strncpy(to_send.name, sender_name, NICK_LEN - 1);
+            to_send.name[NICK_LEN - 1] = '\0';
+
+            uint8_t nonce[crypto_stream_NONCEBYTES] = {0};
+            crypto_stream_xor((uint8_t*)to_send.mess, (const uint8_t*)clean_text, 
+                              strlen(clean_text) + 1, nonce, who[i].session_key_tx);
+            to_send.mess[MESS_LEN - 1] = '\0';
+
+            size_t len = build_frame(resp, CHAT_MSG, &to_send, sizeof(to_send));
+            net_send(sock, resp, len, &who[i].used_addr);
         }
     }
 }
@@ -212,7 +233,7 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
     struct payload_punch* data = (struct payload_punch*)hdr->payload;
 
     //jesli 0 to znaczy ze to od peera, ktory chce sie polaczyc a nie zero to od serwera
-    if(hdr->payload_len == 0) {
+    if(ntohs(hdr->payload_len) == 0) {
         tui_log(tui, "Otrzymano jakis punch z: %s:%d\n", inet_ntoa(sender->sin_addr), ntohs(sender->sin_port));
         for(int i = 0; i < MAX_PEERS; ++i) {
             if(net_addr_compare(sender, &pending[i].public_addr) || 
@@ -276,10 +297,19 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
 }
 
 void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
-                      struct peer *connected, int *connected_count, tui_t* tui) {
+                      struct peer *connected, int *connected_count, tui_t* tui,
+                      uint8_t* key_host_sec, uint8_t* key_host_pub) {
     UNUSED(connected_count);
-    if(hdr->payload_len < sizeof(struct chat_payload_join)) return;
+    tui_log(tui, "Dostalem joina!!!");
+    if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_join)) return;
     struct chat_payload_join *pl = (struct chat_payload_join*)hdr->payload;
+    tui_log(tui, "wysylam join_ok!!!");
+    uint8_t buf[BUF_SIZE];
+    //odeslanie mu JOIN_OK z naszym kluczem publicznym
+    struct chat_payload_join_ok data;
+    memcpy(data.public_key, key_host_pub, crypto_kx_PUBLICKEYBYTES);
+    size_t join_ok_len = build_frame(buf, CHAT_JOIN_OK, &data, sizeof(data));
+    net_send(sock, buf, join_ok_len, sender);
 
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(connected[i].active && 
@@ -290,9 +320,16 @@ void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *h
             tui_log(tui, "Peer %s dołączył!\n", connected[i].nick);
             fflush(stdout);
 
-            uint8_t buf[BUF_SIZE];
+            //wyliczenie kluczy
+            if (crypto_kx_server_session_keys(connected[i].session_key_rx, connected[i].session_key_tx, 
+                                              key_host_pub, key_host_sec, pl->public_key) != 0) {
+                tui_log(tui, "Nie można wyliczyć klucza sesyjnego!");
+                break;
+            }
+
+            //wyslac do reszty ze ktos dolaczyl
             build_frame(buf, CHAT_JOIN, pl, sizeof(*pl));
-            broadcast_mess(sock, connected, buf, sender, tui);
+            broadcast_pack(sock, connected, buf, sender, tui);
             return;
         }
     }
@@ -303,20 +340,33 @@ void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *h
 void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
                      struct peer *connected, int* connected_count, tui_t* tui) {
     UNUSED(connected_count);
-    if(hdr->payload_len < sizeof(struct chat_payload_msg)) return;
-    struct chat_payload_msg *pl = (struct chat_payload_msg*)hdr->payload;
-    //char full_msg[NICK_LEN + MESS_LEN + 4];
-    for(int i = 0; i < MAX_PEERS; ++i) {
-        if(connected[i].active && net_addr_compare(sender, &connected[i].used_addr)) {
-            strncpy(pl->name, connected[i].nick, NICK_LEN - 1);
-            pl->name[NICK_LEN - 1] = '\0';  
-            tui_log(tui, "%s: %s\n", pl->name, pl->mess);
-            fflush(stdout);
-            // rozsyłamy oryginalną ramkę dalej
-            broadcast_mess(sock, connected, (uint8_t*)hdr, sender, tui);
-            return;
-        }
+    if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_msg)) return;
+    struct chat_payload_msg *pl = (struct chat_payload_msg*)hdr->payload;  
+    struct chat_payload_msg to_send;
+    int len;
+
+    //przygotowanie do wyslania -- rozszyfrowanie, na pewno danie dobrego nicku
+    int sender_index;
+    if(!get_sender_idx(&sender_index, sender, connected)) {
+        tui_log(tui, "Otrzymano pakiet ale nie wiem od kogo i nie da sie rozszyfrowac!!!");
+        return;
     }
+    uint8_t nonce[crypto_stream_NONCEBYTES] = {0};
+    char decoded[MESS_LEN];
+                    
+    crypto_stream_xor((uint8_t*)decoded, (const uint8_t*)pl->mess, 
+                        MESS_LEN, nonce, connected[sender_index].session_key_rx);
+    decoded[MESS_LEN-1] = '\0';
+    strncpy(to_send.mess, decoded, MESS_LEN - 1);
+
+    //wpisanie zeby na pewno byl tam prawdziwy nick
+    strncpy(to_send.name, connected[sender_index].nick, NICK_LEN - 1);
+    to_send.name[NICK_LEN - 1] = '\0';  
+    tui_log(tui, "%s: %s\n", pl->name, pl->mess);
+    fflush(stdout);
+
+    broadcast_mess(sock, connected, connected[sender_index].nick, decoded, sender, tui);    
+    tui_on_msg(tui, to_send.name, decoded);
 }
 
 void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
@@ -335,7 +385,7 @@ void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *
             (*connected_count)--;
 
             // rozsyłamy oryginalną ramkę dalej (z pewnym nickiem)
-            broadcast_mess(sock, connected, (uint8_t*)hdr, sender, tui);
+            broadcast_pack(sock, connected, (uint8_t*)hdr, sender, tui);
             return;
         }
     }
@@ -350,4 +400,14 @@ void handle_chat_punch(int sock, struct sockaddr_in *sender, struct msg_header *
             break;
         }
     }                    
+}
+
+bool get_sender_idx(int* idx, struct sockaddr_in *sender, struct peer *connected) {
+    for(int i = 0; i < MAX_PEERS; ++i) {
+        if(connected[i].active && net_addr_compare(&connected[i].used_addr, sender)) {
+            *idx = i;
+            return true;
+        }
+    }
+    return false;
 }
