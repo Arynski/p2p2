@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sodium.h>
 #include "common/network.h"
 #include "handler.h"
 #include "host.h"
@@ -17,6 +18,11 @@ int main(int argc, char** argv) {
         printf("Korzystam z portu %d\n", port);
     }
 
+    if (sodium_init() < 0) {
+        fprintf(stderr, "Błąd: Nie udało się zainicjalizować libsodium!\n");
+        return 1;
+    }
+
     int sock = net_init(port);
     //test na lokalnym komputerze potem na serwerze zmienic tu vvv
     struct sockaddr_in stun;
@@ -26,12 +32,18 @@ int main(int argc, char** argv) {
     //stun.sin_addr.s_addr = inet_addr("127.0.0.1");
     //uint8_t buf[BUF_SIZE];
 
+    //klucze do szyfrowania
+    uint8_t pub[crypto_kx_PUBLICKEYBYTES];
+    uint8_t sec[crypto_kx_SECRETKEYBYTES];
+    crypto_kx_keypair(pub, sec);
+
     tui_t okno;
     tui_init(&okno);
 
     while(1) {
         while(1) {
             if(tui_process_input(&okno)) {
+                if(okno.mode == TUI_EXIT) goto done;
                 if(okno.mode == TUI_LISTING || okno.mode == TUI_CREATE) 
                     break; 
             }
@@ -39,12 +51,15 @@ int main(int argc, char** argv) {
         
         char* nick = okno.user_data.nick;
         if(okno.user_data.mode == 0) {
-            host_start(sock, &stun, nick, &okno);
+            host_start(sock, &stun, nick, &okno, pub, sec);
         } else if(okno.user_data.mode == 1) {
-            peer_start(sock, &stun, nick, &okno);
+            peer_start(sock, &stun, nick, &okno, pub, sec);
         } else if(okno.mode == TUI_EXIT) {
             break;
         }
     }
+done:
+    endwin();
+    printf("Do widzenia!\n");
     return 0;
 }

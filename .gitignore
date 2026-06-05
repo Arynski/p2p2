@@ -6,3 +6,6 @@ klient/tui/egzek
 klient/tui/test.c
 build/
 tests.sh
+test.sh
+maszyna.mmd
+wykres.png

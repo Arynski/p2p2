@@ -130,15 +130,19 @@ void handle_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr) {
         //wysylane do hosta vvv (adresy peera)
         uint8_t respHost[sizeof(struct msg_header) + sizeof(struct payload_punch)];
         struct payload_punch hostPayload; 
-        hostPayload.public_addr = *sender;
-        hostPayload.local_addr = local_addr;
+        hostPayload.public_ip = sender->sin_addr.s_addr;
+        hostPayload.public_port = sender->sin_port;
+        hostPayload.local_ip = local_addr.sin_addr.s_addr;
+        hostPayload.local_port = local_addr.sin_port;
         size_t lenHost = build_frame(respHost, MSG_PUNCH, &hostPayload, sizeof(hostPayload));
 
         //wysylane do peera vvv
         uint8_t respPeer[sizeof(struct msg_header) + sizeof(struct payload_punch)];
-        struct payload_punch peerPayload; 
-        peerPayload.public_addr = jointo->public_host_addr;
-        peerPayload.local_addr = jointo->local_host_addr;
+        struct payload_punch peerPayload;
+        peerPayload.public_ip = jointo->public_host_addr.sin_addr.s_addr;
+        peerPayload.public_port = jointo->public_host_addr.sin_port;
+        peerPayload.local_ip = jointo->local_host_addr.sin_addr.s_addr;
+        peerPayload.local_port = jointo->local_host_addr.sin_port;
         size_t lenPeer = build_frame(respPeer, MSG_PUNCH, &peerPayload, sizeof(peerPayload));
 
         net_send(sock, respHost, lenHost, &jointo->public_host_addr);

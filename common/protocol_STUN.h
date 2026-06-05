@@ -7,6 +7,7 @@
 #define BUF_SIZE 1024
 #define MAX_ROOMS 16
 #define ROOM_NAME_LEN 64
+#define ERROR_MESS_LEN 64
 
 /*
 w zasadzie musi: 
@@ -37,7 +38,8 @@ typedef enum {
     ERR_NOT_FOUND = 2,
     ERR_UNAUTHORIZED = 3,
     ERR_ROOM_NOT_EXISTS = 4,
-    ERR_TOO_MANY_ROOMS = 5
+    ERR_TOO_MANY_ROOMS = 5,
+    ERR_OTHER = 6
 } err_type_t;
 
 //ramka, nagłówek i różne payloady
@@ -51,7 +53,7 @@ struct msg_header {
 
 // --- payloady ---
 struct payload_register {
-    char name[64];
+    char name[ROOM_NAME_LEN];
     uint32_t host_local_ip;       //adres IP z karty sieciowej (network byte order)
     uint16_t host_local_port;     //port, na którym klient nasłuchuje
 } __attribute__((packed));
@@ -66,7 +68,7 @@ struct payload_unregister {
 
 struct room_entry {
     uint32_t room_id;
-    char     name[64];
+    char     name[ROOM_NAME_LEN];
 } __attribute__((packed));
 
 struct payload_list_resp {
@@ -80,14 +82,17 @@ struct payload_join {
     uint16_t peer_local_port;     //port, na którym klient nasłuchuje
 } __attribute__((packed));
 
+//pakiet do synchronizacji, dla peera zawiera adresy/porty hosta, dla hosta peera
 struct payload_punch {
-    struct sockaddr_in public_addr;
-    struct sockaddr_in local_addr;
+    uint32_t public_ip;
+    uint16_t public_port;
+    uint32_t local_ip;
+    uint16_t local_port;
 } __attribute__((packed));
 
 struct payload_error {
     err_type_t code;
-    char message[64];
+    char message[ERROR_MESS_LEN];
 } __attribute__((packed));
 
 
