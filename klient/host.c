@@ -95,7 +95,8 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uin
                     if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_join_ok)) break;
                     tui_log(tui, "CHAT_JOIN od %s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
                     handle_chat_join(sock, &sender, hdr,
-                                     connected_peers, &connected_count, tui, host_sec, host_pub); 
+                                     connected_peers, &connected_count, 
+                                     pending_peers, &pending_count, tui, host_sec, host_pub); 
                     struct chat_payload_join *pl = (struct chat_payload_join *)hdr->payload;
                     tui_on_join(tui, pl->name);
                     break;
@@ -131,12 +132,7 @@ void host_hosting(int sock, struct sockaddr_in *server, char* n, tui_t* tui, uin
                 return;
             }
 
-            struct chat_payload_msg data;
-            strncpy(data.name, n, NICK_LEN - 1);
-            data.name[NICK_LEN - 1] = '\0';
-            strncpy(data.mess, tui->input_buf, MESS_LEN - 1);
-            data.mess[MESS_LEN - 1] = '\0';
-            broadcast_mess(sock, connected_peers, data.name, data.mess, NULL, tui);
+            broadcast_mess(sock, connected_peers, n, tui->input_buf, NULL, tui);
             tui_on_msg(tui, n, tui->input_buf);
             tui_get_send(tui);
         }
@@ -208,10 +204,15 @@ void broadcast_mess(int sock, struct peer* who, const char* sender_name, const c
             strncpy(to_send.name, sender_name, NICK_LEN - 1);
             to_send.name[NICK_LEN - 1] = '\0';
 
-            uint8_t nonce[crypto_stream_NONCEBYTES] = {0};
-            crypto_stream_xor((uint8_t*)to_send.mess, (const uint8_t*)clean_text, 
-                              strlen(clean_text) + 1, nonce, who[i].session_key_tx);
-            to_send.mess[MESS_LEN - 1] = '\0';
+            uint8_t nonce[crypto_secretbox_NONCEBYTES];
+            randombytes_buf(nonce, sizeof(nonce));
+            memcpy(to_send.nonce, nonce, sizeof(nonce));
+            crypto_secretbox_easy((uint8_t*)to_send.mess, (const uint8_t*)clean_text, 
+                      MESS_LEN, nonce, who[i].session_key_tx);
+
+            tui_log(tui, "ENC tx[0..3]: %02x %02x %02x %02x",
+            who[i].session_key_tx[0], who[i].session_key_tx[1],
+            who[i].session_key_tx[2], who[i].session_key_tx[3]);
 
             size_t len = build_frame(resp, CHAT_MSG, &to_send, sizeof(to_send));
             net_send(sock, resp, len, &who[i].used_addr);
@@ -305,19 +306,34 @@ void handle_hosting_punch(int sock, struct sockaddr_in *sender, struct msg_heade
 }
 
 void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *hdr,
-                      struct peer *connected, int *connected_count, tui_t* tui,
+                      struct peer *connected, int *connected_count, 
+                      struct peer *pending, int *pending_count, tui_t* tui,
                       uint8_t* key_host_sec, uint8_t* key_host_pub) {
     UNUSED(connected_count);
     tui_log(tui, "Dostalem joina!!!");
     if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_join)) return;
     struct chat_payload_join *pl = (struct chat_payload_join*)hdr->payload;
-    tui_log(tui, "wysylam join_ok!!!");
     uint8_t buf[BUF_SIZE];
-    //odeslanie mu JOIN_OK z naszym kluczem publicznym
-    struct chat_payload_join_ok data;
-    memcpy(data.public_key, key_host_pub, crypto_kx_PUBLICKEYBYTES);
-    size_t join_ok_len = build_frame(buf, CHAT_JOIN_OK, &data, sizeof(data));
-    net_send(sock, buf, join_ok_len, sender);
+
+    //moze byc jeszcze w pending to go przeniesiemy od razu do connected
+    for(int i = 0; i < MAX_PEERS; ++i) {
+        if((pending[i].active && net_addr_compare(sender, &pending[i].public_addr)) ||
+        (pending[i].active && net_addr_compare(sender, &pending[i].local_addr))) {
+            // znajdź wolne miejsce w connected
+            for(int j = 0; j < MAX_PEERS; ++j) {
+                if(!connected[j].active) {
+                    connected[j] = pending[i];
+                    connected[j].used_addr = *sender;
+                    connected[j].timestamp = time(NULL);
+                    memset(&pending[i], 0, sizeof(struct peer));
+                    (*pending_count)--;
+                    (*connected_count)++;
+                    break;
+                }
+            }
+            break;
+        }
+    }
 
     for(int i = 0; i < MAX_PEERS; ++i) {
         if(connected[i].active && 
@@ -334,6 +350,15 @@ void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *h
                 tui_log(tui, "Nie można wyliczyć klucza sesyjnego!");
                 break;
             }
+            tui_log(tui, "HOST tx[0..3]: %02x %02x %02x %02x", 
+            connected[i].session_key_tx[0], connected[i].session_key_tx[1],
+            connected[i].session_key_tx[2], connected[i].session_key_tx[3]);
+
+            //chat_join_ok
+            struct chat_payload_join_ok data;
+            memcpy(data.public_key, key_host_pub, crypto_kx_PUBLICKEYBYTES);
+            size_t join_ok_len = build_frame(buf, CHAT_JOIN_OK, &data, sizeof(data));
+            net_send(sock, buf, join_ok_len, sender);
 
             //wyslac do reszty ze ktos dolaczyl
             build_frame(buf, CHAT_JOIN, pl, sizeof(*pl));
@@ -341,7 +366,6 @@ void handle_chat_join(int sock, struct sockaddr_in *sender, struct msg_header *h
             return;
         }
     }
-    // brak miejsca
     tui_log(tui, "Brak miejsca na nowego peera\n"); fflush(stdout);
 }
 
@@ -349,9 +373,7 @@ void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hd
                      struct peer *connected, int* connected_count, tui_t* tui) {
     UNUSED(connected_count);
     if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_msg)) return;
-    struct chat_payload_msg *pl = (struct chat_payload_msg*)hdr->payload;  
-    struct chat_payload_msg to_send;
-    int len;
+    struct chat_payload_msg *pl = (struct chat_payload_msg*)hdr->payload;
 
     //przygotowanie do wyslania -- rozszyfrowanie, na pewno danie dobrego nicku
     int sender_index;
@@ -359,22 +381,17 @@ void handle_chat_msg(int sock, struct sockaddr_in *sender, struct msg_header *hd
         tui_log(tui, "Otrzymano pakiet ale nie wiem od kogo i nie da sie rozszyfrowac!!!");
         return;
     }
-    uint8_t nonce[crypto_stream_NONCEBYTES] = {0};
-    char decoded[MESS_LEN];
-                    
-    crypto_stream_xor((uint8_t*)decoded, (const uint8_t*)pl->mess, 
-                        MESS_LEN, nonce, connected[sender_index].session_key_rx);
-    decoded[MESS_LEN-1] = '\0';
-    strncpy(to_send.mess, decoded, MESS_LEN - 1);
 
-    //wpisanie zeby na pewno byl tam prawdziwy nick
-    strncpy(to_send.name, connected[sender_index].nick, NICK_LEN - 1);
-    to_send.name[NICK_LEN - 1] = '\0';  
-    tui_log(tui, "%s: %s\n", pl->name, pl->mess);
-    fflush(stdout);
+    uint8_t decoded[MESS_LEN];
+    uint16_t cipher_len = ntohs(hdr->payload_len) - NICK_LEN - crypto_secretbox_NONCEBYTES;
+    if (crypto_secretbox_open_easy(decoded, pl->mess, cipher_len, pl->nonce, 
+        connected[sender_index].session_key_rx) != 0) {
+        tui_log(tui, "Błąd: wiadomość sfałszowana!");
+        return;
+    }   
 
-    broadcast_mess(sock, connected, connected[sender_index].nick, decoded, sender, tui);    
-    tui_on_msg(tui, to_send.name, decoded);
+broadcast_mess(sock, connected, connected[sender_index].nick, (char*)decoded, sender, tui);
+tui_on_msg(tui, connected[sender_index].nick, (char*)decoded);
 }
 
 void handle_chat_leave(int sock, struct sockaddr_in *sender, struct msg_header *hdr,

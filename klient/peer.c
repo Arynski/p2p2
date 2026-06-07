@@ -155,19 +155,22 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui, uint8_t*
                 continue;
             switch(hdr->type) {
                 case CHAT_MSG: {
-                    tui_log(tui, "CHAT_MSG od %s:%d", inet_ntoa(sender.sin_addr), ntohs(sender.sin_port));
                     if(ntohs(hdr->payload_len) < sizeof(struct chat_payload_msg)) break;
                     struct chat_payload_msg *pl = (struct chat_payload_msg *)hdr->payload;
-                    
-                    //odszyfrowac
-                    uint8_t nonce[crypto_stream_NONCEBYTES] = {0};
-                    char decoded[MESS_LEN];
-                    
-                    crypto_stream_xor((uint8_t*)decoded, (const uint8_t*)pl->mess, 
-                                    MESS_LEN, nonce, session_key_rx);
-                    decoded[MESS_LEN - 1] = '\0';
 
-                    tui_on_msg(tui, pl->name, decoded);
+                    tui_log(tui, "DEC rx[0..3]: %02x %02x %02x %02x",
+                    session_key_rx[0], session_key_rx[1],
+                    session_key_rx[2], session_key_rx[3]);
+
+                    uint8_t decoded[MESS_LEN];
+                    uint16_t cipher_len = ntohs(hdr->payload_len) - NICK_LEN - crypto_secretbox_NONCEBYTES;
+                    if (crypto_secretbox_open_easy(decoded, pl->mess, cipher_len, pl->nonce, 
+                        session_key_rx) != 0) {
+                        tui_log(tui, "Błąd: wiadomość sfałszowana!");
+                        break;
+                    }
+
+                    tui_on_msg(tui, pl->name, (char*)decoded);
                     break;
                 }
                  case CHAT_JOIN_OK: {
@@ -179,6 +182,10 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui, uint8_t*
                         tui_log(tui, "Nie można wyliczyć klucza sesyjnego!");
                         break;
                     }
+
+                    tui_log(tui, "PEER rx[0..3]: %02x %02x %02x %02x",
+                    session_key_rx[0], session_key_rx[1],
+                    session_key_rx[2], session_key_rx[3]);
 
                     tui_get_join(tui);
                     is_chatting = true;
@@ -228,12 +235,14 @@ void peer_chat(int sock, struct sockaddr_in *host, char* n, tui_t* tui, uint8_t*
             struct chat_payload_msg data;
             strncpy(data.name, tui->user_data.nick, NICK_LEN - 1);
             data.name[NICK_LEN - 1] = '\0';
-            memset(data.mess, 0, MESS_LEN);
 
             //szyfrowac
-            uint8_t nonce[crypto_stream_NONCEBYTES] = {0};
-            crypto_stream_xor((uint8_t*)data.mess, (const uint8_t*)tui->input_buf, 
-                            strlen(tui->input_buf) + 1, nonce, session_key_tx);
+            uint8_t nonce[crypto_secretbox_NONCEBYTES];
+            randombytes_buf(nonce, sizeof(nonce));
+            memcpy(data.nonce, nonce, sizeof(nonce));
+            uint8_t plaintext[MESS_LEN] = {0};
+            strncpy((char*)plaintext, tui->input_buf, MESS_LEN - 1);
+            crypto_secretbox_easy(data.mess, plaintext, MESS_LEN, nonce, session_key_tx);
 
             len = build_frame(buf, CHAT_MSG, &data, sizeof(data));
             net_send(sock, buf, len, host);
