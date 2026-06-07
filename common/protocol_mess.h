@@ -28,7 +28,8 @@ struct chat_payload_join_ok {
 
 struct chat_payload_msg {
     char name[NICK_LEN];
-    char mess[MESS_LEN];
+    uint8_t nonce[crypto_secretbox_NONCEBYTES];
+    uint8_t mess[MESS_LEN + crypto_secretbox_MACBYTES];
 } __attribute__((packed));
 
 struct chat_payload_kick {
