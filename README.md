@@ -11,7 +11,7 @@ Centralny serwer STUN przechowuje listę aktywnych pokojów i pomaga
 dwóm klientom "znaleźć się" w sieci, wymieniając ich adresy IP. 
 Po nawiązaniu połączenia serwer nie jest już potrzebny — wiadomości 
 płyną bezpośrednio między hostem a peerami. Każda sesja ma unikalny 
-klucz szyfrowania wymieniany przy połączeniu (X25519 + ChaCha20).
+klucz szyfrowania wymieniany przy połączeniu (ChaCha20-Poly1305).
 
 ## Wymagania
 
